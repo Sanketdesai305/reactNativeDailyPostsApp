@@ -1,4 +1,12 @@
+import { useAuth } from "@/context/AuthContext";
+import { formatTimeAgo, formatTimeRemaining } from "@/lib/date-helper";
+import { supabase } from "@/lib/supabase/client";
+import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from "@react-navigation/native";
+import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,51 +19,110 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-import { useAuth } from "@/context/AuthContext";
-import { formatTimeAgo, formatTimeRemaining } from "@/lib/date-helper";
-import { Image } from "expo-image";
-import { useRouter } from "expo-router";
-import { useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Post, usePosts } from "../hooks/usePosts";
-
 interface PostCardProps {
   post: Post;
   currentUserId?: string;
+  requestCount: number;
+  sendRequest: (receiverId: string, postId: string) => Promise<boolean>;
 }
 
-const PostCard = ({ post, currentUserId }: PostCardProps) => {
+const PostCard = ({ post, currentUserId,requestCount,sendRequest }: PostCardProps) => {
+  const [requestSent, setRequestSent] = useState(false);
   const postUser = post.profiles;
   const isOwnPost = post.user_id === currentUserId;
+  const router = useRouter();
+
+    useEffect(() => {
+    const checkRequestStatus = async () => {
+      if (!currentUserId || isOwnPost) {
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("requests")
+        .select("id")
+        .eq("post_id", post.id)
+        .eq("sender_id", currentUserId)
+        .eq("status","pending")
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error checking request:", error);
+        return;
+      }
+
+      setRequestSent(!!data);
+    };
+
+    checkRequestStatus();
+  }, [currentUserId, post.id, isOwnPost]);
+  
+ const sendRequestFunc = async () => {
+    const success = await sendRequest(post.user_id, post.id);
+
+    if (success) {
+      setRequestSent(true);
+    }
+  };
   return (
     <View style={styles.postContainer}>
       <View style={styles.postHeader}>
-        <View style={styles.userInfo}>
-          {postUser?.profile_image_url ? (
-            <Image
-              cachePolicy={"none"}
-              source={{ uri: postUser.profile_image_url }}
-              style={styles.avatar}
-            />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <Text style={styles.avatarText}>
-                {postUser?.name?.[0]?.toUpperCase() || "U"}
+
+          <TouchableOpacity
+           onPress={() =>
+            router.push({
+              pathname: "/details",
+              params: {
+                userId: post.user_id,
+              },
+            })
+          }
+          >
+          <View style={styles.userInfo}>
+            {postUser?.profile_image_url ? (
+              <Image
+                cachePolicy={"none"}
+                source={{ uri: postUser.profile_image_url }}
+                style={styles.avatar}
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <Text style={styles.avatarText}>
+                  {postUser?.name?.[0]?.toUpperCase() || "U"}
+                </Text>
+              </View>
+            )}
+
+            <View>
+              <Text style={styles.username}>
+                {isOwnPost ? "You" : `@${postUser?.username}`}
               </Text>
+              <Text style={styles.timeAgo}>{formatTimeAgo(post.created_at)}</Text>
             </View>
-          )}
-
-          <View>
-            <Text style={styles.username}>
-              {isOwnPost ? "You" : `@${postUser?.username}`}
-            </Text>
-            <Text style={styles.timeAgo}>{formatTimeAgo(post.created_at)}</Text>
           </View>
-        </View>
-
+          </TouchableOpacity>
         {/* Post content */}
         <View style={styles.timeRemainingBadge}>
+                    {isOwnPost && (
+            <TouchableOpacity style={styles.bell}
+            onPress={() => router.push("/notifications")}>
+              <Ionicons
+                name="notifications"
+                size={28}
+                style={styles.bellIcon}
+              />
+
+               {requestCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                     {requestCount > 99 ? "99+" : requestCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
           <Text style={styles.timeRemainingText}>
             {formatTimeRemaining(post.expires_at)}
           </Text>
@@ -77,6 +144,11 @@ const PostCard = ({ post, currentUserId }: PostCardProps) => {
           {isOwnPost ? "Your Post" : `${postUser?.name}' post`} • Expires in{" "}
           {formatTimeRemaining(post.expires_at)}
         </Text>
+        {!isOwnPost && <TouchableOpacity onPress={sendRequestFunc} style={styles.SendRequestButton}>
+          <Text style={styles.SendRequestText}>
+             {requestSent ? "Sent" : "Send Request"}
+          </Text>
+        </TouchableOpacity>}
       </View>
     </View>
   );
@@ -90,9 +162,23 @@ export default function Index() {
   const [refreshing, setRefreshing] = useState(false);
 
   const router = useRouter();
-  const { createPost, posts, refreshPosts } = usePosts();
+  // const { createPost, posts, refreshPosts } = usePosts();
+  const {
+  createPost,
+  posts,
+  refreshPosts,
+  sendRequest,
+  requestCount,
+} = usePosts();
   const { user } = useAuth();
 
+    const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (isFocused && user) {
+      refreshPosts();
+    }
+  }, [isFocused, user]);
   // Check if user has an active post
   const userActivePost = posts.find(
     (post) =>
@@ -184,9 +270,14 @@ export default function Index() {
     }
   };
 
-  const renderPost = ({ item }: { item: Post }) => (
-    <PostCard post={item} currentUserId={user?.id} />
-  );
+ const renderPost = ({ item }: { item: Post }) => (
+  <PostCard
+    post={item}
+    currentUserId={user?.id}
+    requestCount={requestCount}
+    sendRequest={sendRequest}
+  />
+);
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom", "top"]}>
@@ -416,16 +507,52 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
   },
-  timeRemainingBadge: {
-    backgroundColor: "#000",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    bell:{
+    position:"relative",
+    color:"#fff",
+    padding:1,
+    marginLeft:40,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  timeRemainingText: {
-    color: "#fff",
+  bellIcon:{
+    color:"#333"
+  },
+  notificationBadge:{
+  position: "absolute",
+  top: -2,
+  right: -2,
+  backgroundColor: "red",
+  minWidth: 18,
+  height: 18,
+  borderRadius: 9,
+  alignItems: "center",
+  justifyContent: "center",
+  paddingHorizontal: 4,
+  },
+  notificationBadgeText:{
+     color: "white",
+  fontSize: 11,
+  fontWeight: "bold",
+  },
+  timeRemainingBadge: {
+    backgroundColor: "#fff",
+  },
+    timeRemainingText: {
+    color: "#000",
     fontSize: 12,
     fontWeight: "600",
+  },
+  SendRequestButton:{
+    display:"flex",
+    backgroundColor:"#000",
+    borderRadius:12,
+    padding:10,
+    marginTop:5
+  },
+  SendRequestText:{
+    color:"#fff",
+    textAlign:"center"
   },
   postImage: {
     width: "100%",

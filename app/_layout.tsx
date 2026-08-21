@@ -1,7 +1,7 @@
 "use client";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { Slot, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
@@ -14,7 +14,9 @@ export default function RootLayout() {
 
     const inAuthGroup = segments[0] === "(auth)";
     const inTabsGroup = segments[0] === "(tabs)";
-
+    const inNotifications = segments[0] === "notifications";
+    const inOnboarding = segments[0] === "onboarding";
+    const inDetails = segments[0] === "details";
     useEffect(() => {
       if (isLoading) {
         setShowOverlay(true);
@@ -26,14 +28,28 @@ export default function RootLayout() {
 
       if (!user && !inAuthGroup) {
         router.replace("/(auth)/login");
-      } else if (user && !inTabsGroup) {
+      } else if (user && !inTabsGroup && !inNotifications && !inOnboarding && !inDetails ) {
         router.replace("/(tabs)");
       }
-    }, [user, isLoading, inAuthGroup, inTabsGroup, router]);
+    }, [user, isLoading, inAuthGroup, inTabsGroup, inNotifications,inOnboarding,inDetails, router]);
 
     return (
       <>
-        <Slot />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="notifications"
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+            <Stack.Screen
+            name="onboarding"
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+        </Stack>
         {showOverlay && (
           <View style={styles.overlay} pointerEvents="auto">
             <ActivityIndicator size="large" />

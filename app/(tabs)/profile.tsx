@@ -1,8 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
-import { uploadProfileImage } from "@/lib/supabase/storage";
 import { Image } from "expo-image";
-import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -19,44 +17,44 @@ export default function Profile() {
   const [isUpdating, setIsUpdating] = useState(false);
   const router = useRouter();
 
-  const handleUpdateProfileImage = async () => {
-    if (!user) return;
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(
-        "Permission needed",
-        "We need camera roll permissions to select a profile image.",
-      );
-      return;
-    }
+  // const handleUpdateProfileImage = async () => {
+  //   if (!user) return;
+  //   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  //   if (status !== "granted") {
+  //     Alert.alert(
+  //       "Permission needed",
+  //       "We need camera roll permissions to select a profile image.",
+  //     );
+  //     return;
+  //   }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setIsUpdating(true);
-      try {
-        const imageUrl = await uploadProfileImage(
-          user.id,
-          result.assets[0].uri,
-        );
+  //   const result = await ImagePicker.launchImageLibraryAsync({
+  //     mediaTypes: ["images"],
+  //     allowsEditing: true,
+  //     aspect: [1, 1],
+  //     quality: 0.8,
+  //   });
+  //   if (!result.canceled && result.assets[0]) {
+  //     setIsUpdating(true);
+  //     try {
+  //       const imageUrl = await uploadProfileImage(
+  //         user.id,
+  //         result.assets[0].uri,
+  //       );
 
-        await updateUser({ profileImage: imageUrl });
-        Alert.alert("Success", "Profile image updated.");
-      } catch (error) {
-        console.error("Error updating profile image:", error);
-        Alert.alert(
-          "Error",
-          "Failed to update profile image. Please try again.",
-        );
-      } finally {
-        setIsUpdating(false);
-      }
-    }
-  };
+  //       await updateUser({ profileImage: imageUrl });
+  //       Alert.alert("Success", "Profile image updated.");
+  //     } catch (error) {
+  //       console.error("Error updating profile image:", error);
+  //       Alert.alert(
+  //         "Error",
+  //         "Failed to update profile image. Please try again.",
+  //       );
+  //     } finally {
+  //       setIsUpdating(false);
+  //     }
+  //   }
+  // };
 
   const handleSignOut = async () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -79,32 +77,34 @@ export default function Profile() {
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.profileSection}>
-          <TouchableOpacity
-            onPress={handleUpdateProfileImage}
-            disabled={isUpdating}
-          >
-            <View>
-              {user?.profileImage ? (
-                <Image
-                  source={{ uri: user.profileImage }}
-                  style={styles.profileImage}
-                  cachePolicy={"none"}
-                />
-              ) : (
-                <View
-                  style={[styles.profileImage, styles.profileImagePlaceholder]}
-                >
-                  <Text style={styles.profileImageText}>
-                    {user?.name?.[0]?.toUpperCase() || "U"}
-                  </Text>
-                </View>
-              )}
-
+          <Link href="../details" asChild>
+            <TouchableOpacity
+              // onPress={handleUpdateProfileImage}
+              disabled={isUpdating}
+            >
+              <View>
+                {user?.profileImage ? (
+                  <Image
+                    source={{ uri: user.profileImage }}
+                    style={styles.profileImage}
+                    cachePolicy={"none"}
+                  />
+                ) : (
+                  <View
+                    style={[styles.profileImage, styles.profileImagePlaceholder]}
+                  >
+                    <Text style={styles.profileImageText}>
+                      {user?.name?.[0]?.toUpperCase() || "U"}
+                    </Text>
+                  </View>
+                )}
+                {/* 
               <View style={styles.editBadge}>
                 <Text style={styles.editBadgeText}>Edit</Text>
+              </View> */}
               </View>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </Link>
           <Text style={styles.name}>{user?.name || "No Name"}</Text>
           <Text style={styles.username}>@{user?.username || "user"}</Text>
           <Text style={styles.email}>{user?.email}</Text>
@@ -113,12 +113,12 @@ export default function Profile() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity style={styles.settingItem} onPress={() => router.push("/onboarding")}>
             <Text style={styles.settingLabel}>Edit Profile</Text>
             <Text style={styles.settingValue}>→</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity style={styles.settingItem} onPress={() => router.push("/notifications")}>
             <Text style={styles.settingLabel}>Notifications</Text>
             <Text style={styles.settingValue}>→</Text>
           </TouchableOpacity>

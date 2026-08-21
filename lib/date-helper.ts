@@ -7,8 +7,8 @@ export const formatTimeAgo = (createdAt: string):string => {
      const hours = Math.floor(diff/(1000*60*60));
 
      if(minutes < 1) return "just now";
-     if(minutes < 60) return `${minutes} ago`;
-     if(hours < 24) return `${hours} ago`;
+     if(minutes < 60) return `${minutes}m ago`;
+     if(hours < 24) return `${hours}h ago`;
      return `${Math.floor(hours/24)}d ago`;
 };
 

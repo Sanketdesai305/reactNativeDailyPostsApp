@@ -4,26 +4,36 @@ import { uploadProfileImage } from "@/lib/supabase/storage";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function SignUpScreen() {
+export default function OnboardingScreen() {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [isNewProfileImage, setIsNewProfileImage] = useState(false);
   const { user, updateUser } = useAuth();
   const router = useRouter();
 
+  useEffect(() => {
+    if (user) {
+      setName(user.name ?? "");
+      setUsername(user.username ?? "");
+      setProfileImage(user.profileImage ?? null);
+      setIsNewProfileImage(false);
+    }
+  }, [user]);
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -42,6 +52,7 @@ export default function SignUpScreen() {
     });
     if (!result.canceled && result.assets[0]) {
       setProfileImage(result.assets[0].uri);
+      setIsNewProfileImage(true);
     }
   };
 
@@ -62,6 +73,7 @@ export default function SignUpScreen() {
     });
     if (!result.canceled && result.assets[0]) {
       setProfileImage(result.assets[0].uri);
+      setIsNewProfileImage(true);
     }
   };
 
@@ -75,10 +87,12 @@ export default function SignUpScreen() {
   const handleComplete = async () => {
     if (!name || !username) {
       Alert.alert("Error", "Please fill in all fields");
+      return;
     }
 
     if (username.length < 3) {
       Alert.alert("Error", "Username must be at least 3 characters");
+      return;
     }
 
     setIsLoading(true);
@@ -104,8 +118,8 @@ export default function SignUpScreen() {
       }
 
       // Upload profile img
-      let profileImageUrl: string | undefined;
-      if (profileImage) {
+      let profileImageUrl: string | undefined = user.profileImage;
+      if (isNewProfileImage && profileImage) {
         try {
           profileImageUrl = await uploadProfileImage(user.id, profileImage);
         } catch (error) {
@@ -139,7 +153,7 @@ export default function SignUpScreen() {
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Complete Your Profile</Text>
+          <Text style={styles.title}>Edit Your Profile</Text>
           <Text style={styles.subtitle}>
             Add your information to get started
           </Text>

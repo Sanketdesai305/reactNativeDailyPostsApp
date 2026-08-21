@@ -3,12 +3,15 @@ import { supabase } from "./client";
 export const uploadProfileImage =async (userId:string,imageUri:string)=>{
     try{
         const fileExtension = imageUri.split(".").pop() || "jpg";
-        const fileName = `${userId}/profile.${fileExtension}`;
+        const fileName = `${userId}/profile.jpg`;
         const file = new File(imageUri);
         const bytes = await file.bytes();
 
-        const { error } = await supabase.storage.from("profiles").upload(fileName,bytes,{
+        const { error } = await supabase.storage
+        .from("profiles")
+        .upload(fileName,bytes,{
             cacheControl:"3600",
+            contentType:"image/jpeg",
             upsert:true,
         });
         if(error){
