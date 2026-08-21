@@ -31,6 +31,22 @@ export interface ReceivedRequest {
   sender: PostUser | null;
 }
 
+export interface AcceptedRequest {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  post_id: string;
+  status: string;
+  created_at: string;
+
+  otherUser: {
+    id: string;
+    name: string | null;
+    username: string | null;
+    profile_image_url: string | null;
+  } | null;
+}
+
 export const usePosts = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,17 +57,31 @@ export const usePosts = () => {
   //   loadPosts();
   // }, []);
   useEffect(() => {
-  if (user) {
-    loadPosts();
-    getRequestCount();
-  }
-}, [user]);
+    if (user) {
+      loadPosts();
+      getRequestCount();
+    }
+  }, [user]);
+
+  const deleteExpiredPosts = async () => {
+    const { error } = await supabase
+      .from("posts")
+      .delete()
+      .or(
+        `is_active.eq.false,expires_at.lte.${new Date().toISOString()}`
+      );
+
+    if (error) {
+      console.error("Error deleting expired posts:", error);
+    }
+  };
 
   const loadPosts = async () => {
     if (!user) return;
 
     setIsLoading(true);
     try {
+      await deleteExpiredPosts();
       const { data: postsData, error: postsError } = await supabase
         .from("posts")
         .select(
@@ -85,6 +115,8 @@ export const usePosts = () => {
       setIsLoading(false);
     }
   };
+
+
 
   const createPost = async (imageUri: string, description?: string) => {
     if (!user) {
@@ -140,7 +172,7 @@ export const usePosts = () => {
   };
 
 
-   // SEND REQUEST
+  // SEND REQUEST
   const sendRequest = async (
     receiverId: string,
     postId: string
@@ -196,8 +228,34 @@ export const usePosts = () => {
       return false;
     }
   };
-  
-// GET NUMBER OF RECEIVED REQUESTS
+
+  const acceptRequest = async (requestId: string) => {
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    try {
+      const { error } = await supabase
+        .from("requests")
+        .update({ status: "accepted" })
+        .eq("id", requestId)
+        .eq("receiver_id", user.id)
+        .eq("status", "pending");
+
+      if (error) {
+        console.error("Error accepting request:", error);
+        return false;
+      }
+
+      setRequestCount((count) => Math.max(0, count - 1));
+      return true;
+    } catch (error) {
+      console.error("Error in acceptRequest:", error);
+      return false;
+    }
+  };
+
+  // GET NUMBER OF RECEIVED REQUESTS
   const getRequestCount = async () => {
     if (!user) return;
 
@@ -222,87 +280,177 @@ export const usePosts = () => {
     }
   };
 
-const getReceivedRequests = async (): Promise<ReceivedRequest[]> => {
-  if (!user) return [];
+  const getReceivedRequests = async (): Promise<ReceivedRequest[]> => {
+    if (!user) return [];
 
-  try {
-    // Get pending requests
-    const { data: requestsData, error: requestsError } = await supabase
-      .from("requests")
-      .select("*")
-      .eq("receiver_id", user.id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false });
+    try {
+      // Get pending requests
+      const { data: requestsData, error: requestsError } = await supabase
+        .from("requests")
+        .select("*")
+        .eq("receiver_id", user.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
 
-    if (requestsError) {
-      console.error("Error getting requests:", requestsError);
-      return [];
-    }
+      if (requestsError) {
+        console.error("Error getting requests:", requestsError);
+        return [];
+      }
 
-    if (!requestsData || requestsData.length === 0) {
-      return [];
-    }
+      if (!requestsData || requestsData.length === 0) {
+        return [];
+      }
 
-    // Get all sender IDs
-    const senderIds = requestsData.map(
-      (request) => request.sender_id
-    );
-
-    // Get their profiles
-    const { data: profilesData, error: profilesError } =
-      await supabase
-        .from("profiles")
-        .select(
-          "id, name, username, profile_image_url"
-        )
-        .in("id", senderIds);
-
-    if (profilesError) {
-      console.error(
-        "Error getting sender profiles:",
-        profilesError
+      // Get all sender IDs
+      const senderIds = requestsData.map(
+        (request) => request.sender_id
       );
+
+      // Get their profiles
+      const { data: profilesData, error: profilesError } =
+        await supabase
+          .from("profiles")
+          .select(
+            "id, name, username, profile_image_url"
+          )
+          .in("id", senderIds);
+
+      if (profilesError) {
+        console.error(
+          "Error getting sender profiles:",
+          profilesError
+        );
+        return [];
+      }
+
+      // Combine request + sender profile
+      const requestsWithProfiles: ReceivedRequest[] =
+        requestsData.map((request) => ({
+          id: request.id,
+          sender_id: request.sender_id,
+          receiver_id: request.receiver_id,
+          post_id: request.post_id,
+          status: request.status,
+          created_at: request.created_at,
+
+          sender:
+            profilesData?.find(
+              (profile) =>
+                profile.id === request.sender_id
+            ) ?? null,
+        }));
+
+      return requestsWithProfiles;
+
+    } catch (error) {
+      console.error(
+        "Error in getReceivedRequests:",
+        error
+      );
+
       return [];
     }
+  };
 
-    // Combine request + sender profile
-    const requestsWithProfiles: ReceivedRequest[] =
-      requestsData.map((request) => ({
-        id: request.id,
-        sender_id: request.sender_id,
-        receiver_id: request.receiver_id,
-        post_id: request.post_id,
-        status: request.status,
-        created_at: request.created_at,
+  const getAcceptedRequests = async (): Promise<AcceptedRequest[]> => {
+    if (!user) return [];
 
-        sender:
-          profilesData?.find(
-            (profile) =>
-              profile.id === request.sender_id
-          ) ?? null,
-      }));
+    try {
+      // 1. Get accepted requests involving the current user
+      const { data: requests, error: requestError } = await supabase
+        .from("requests")
+        .select(`
+        id,
+        sender_id,
+        receiver_id,
+        post_id,
+        status,
+        created_at
+      `)
+        .eq("status", "accepted")
+        .or(
+          `sender_id.eq.${user.id},receiver_id.eq.${user.id}`
+        );
 
-    return requestsWithProfiles;
+      if (requestError) {
+        console.error(
+          "Error getting accepted requests:",
+          requestError
+        );
+        return [];
+      }
 
-  } catch (error) {
-    console.error(
-      "Error in getReceivedRequests:",
-      error
-    );
+      if (!requests || requests.length === 0) {
+        return [];
+      }
 
-    return [];
-  }
-};
+      // 2. Determine the other user's ID for each request
+      const otherUserIds = requests.map((request) =>
+        request.sender_id === user.id
+          ? request.receiver_id
+          : request.sender_id
+      );
 
+      // 3. Get their profiles
+      const { data: profiles, error: profileError } = await supabase
+        .from("profiles")
+        .select(`
+        id,
+        name,
+        username,
+        profile_image_url
+      `)
+        .in("id", otherUserIds);
+
+      if (profileError) {
+        console.error(
+          "Error getting profiles:",
+          profileError
+        );
+        return [];
+      }
+
+      // 4. Attach the correct profile to each request
+      return requests.map((request) => {
+        const otherUserId =
+          request.sender_id === user.id
+            ? request.receiver_id
+            : request.sender_id;
+
+        const otherUser = profiles?.find(
+          (profile) => profile.id === otherUserId
+        );
+
+        return {
+          id: request.id,
+          sender_id: request.sender_id,
+          receiver_id: request.receiver_id,
+          post_id: request.post_id,
+          status: request.status,
+          created_at: request.created_at,
+          otherUser: otherUser ?? null,
+        };
+      });
+    } catch (error) {
+      console.error(
+        "Error in getAcceptedRequests:",
+        error
+      );
+
+      return [];
+    }
+  };
 
   return {
-    createPost, 
-    posts, 
-    refreshPosts, 
+    createPost,
+    posts,
+    refreshPosts,
     sendRequest,
     rejectRequest,
+    acceptRequest,
     requestCount,
-    getRequestCount, 
-    getReceivedRequests 
+    getRequestCount,
+    getReceivedRequests,
+    getAcceptedRequests,
   };
 };

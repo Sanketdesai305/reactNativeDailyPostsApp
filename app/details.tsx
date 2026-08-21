@@ -5,11 +5,11 @@ import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -17,43 +17,43 @@ export default function Details() {
   const router = useRouter();
   const { user } = useAuth();
 
-const { userId } = useLocalSearchParams<{
-  userId?: string;
-}>();
+  const { userId } = useLocalSearchParams<{
+    userId?: string;
+  }>();
 
-const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
 
-const profileUserId = userId || user?.id;
-const isOwnProfile = profileUserId === user?.id;
-useEffect(() => {
-  if (!profileUserId) return;
+  const profileUserId = userId || user?.id;
+  const isOwnProfile = profileUserId === user?.id;
+  useEffect(() => {
+    if (!profileUserId) return;
 
-  const loadProfile = async () => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(`
+    const loadProfile = async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(`
         id,
         name,
         username,
         profile_image_url
       `)
-      .eq("id", profileUserId)
-      .single();
+        .eq("id", profileUserId)
+        .single();
 
-    if (error) {
-      console.error(error);
-      return;
-    }
+      if (error) {
+        console.error(error);
+        return;
+      }
 
-    setProfile(data);
-  };
+      setProfile(data);
+    };
 
-  loadProfile();
-}, [profileUserId]);
+    loadProfile();
+  }, [profileUserId]);
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        
+
         {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -74,7 +74,7 @@ useEffect(() => {
 
         {/* PROFILE HEADER */}
         <View style={styles.profileSection}>
-          
+
           {profile?.profile_image_url ? (
             <Image
               source={{ uri: profile?.profile_image_url }}
@@ -150,80 +150,80 @@ useEffect(() => {
         </View>
 
         {/* EMAIL */}
-{isOwnProfile && (
-  <View style={styles.infoRow}>
-    <View style={styles.iconContainer}>
-      <Ionicons
-        name="mail-outline"
-        size={22}
-        color="#6C63FF"
-      />
-    </View>
+        {isOwnProfile && (
+          <View style={styles.infoRow}>
+            <View style={styles.iconContainer}>
+              <Ionicons
+                name="mail-outline"
+                size={22}
+                color="#6C63FF"
+              />
+            </View>
 
-    <View style={styles.infoContent}>
-      <Text style={styles.label}>
-        Email
-      </Text>
+            <View style={styles.infoContent}>
+              <Text style={styles.label}>
+                Email
+              </Text>
 
-      <Text style={styles.value}>
-        {user?.email || "Not provided"}
-      </Text>
-    </View>
-  </View>
-)}
+              <Text style={styles.value}>
+                {user?.email || "Not provided"}
+              </Text>
+            </View>
+          </View>
+        )}
 
-{/* ACCOUNT CARD */}
-{isOwnProfile && (
-  <View style={styles.card}>
+        {/* ACCOUNT CARD */}
+        {isOwnProfile && (
+          <View style={styles.card}>
 
-    <Text style={styles.sectionTitle}>
-      Account
-    </Text>
+            <Text style={styles.sectionTitle}>
+              Account
+            </Text>
 
-    <View style={styles.infoRow}>
-      <View style={styles.iconContainer}>
-        <Ionicons
-          name="checkmark-circle-outline"
-          size={22}
-          color="#6C63FF"
-        />
-      </View>
+            <View style={styles.infoRow}>
+              <View style={styles.iconContainer}>
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={22}
+                  color="#6C63FF"
+                />
+              </View>
 
-      <View style={styles.infoContent}>
-        <Text style={styles.label}>
-          Account Status
-        </Text>
+              <View style={styles.infoContent}>
+                <Text style={styles.label}>
+                  Account Status
+                </Text>
 
-        <Text style={styles.value}>
-          {user?.onboardingCompleted
-            ? "Profile completed"
-            : "Profile incomplete"}
-        </Text>
-      </View>
-    </View>
+                <Text style={styles.value}>
+                  {user?.onboardingCompleted
+                    ? "Profile completed"
+                    : "Profile incomplete"}
+                </Text>
+              </View>
+            </View>
 
-  </View>
-)}
+          </View>
+        )}
 
-       
+
 
         {/* EDIT BUTTON */}
         {isOwnProfile && (
-  <TouchableOpacity
-    style={styles.editButton}
-    onPress={() => router.push("/onboarding")}
-  >
-    <Ionicons
-      name="create-outline"
-      size={20}
-      color="#fff"
-    />
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => router.push("/onboarding")}
+          >
+            <Ionicons
+              name="create-outline"
+              size={20}
+              color="#fff"
+            />
 
-    <Text style={styles.editButtonText}>
-      Edit Profile
-    </Text>
-  </TouchableOpacity>
-)}
+            <Text style={styles.editButtonText}>
+              Edit Profile
+            </Text>
+          </TouchableOpacity>
+        )}
 
       </ScrollView>
     </SafeAreaView>
@@ -259,9 +259,9 @@ const styles = StyleSheet.create({
   },
 
   profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: "100%",
+    height: 200,
+    borderRadius: 0,
     marginBottom: 15,
   },
 

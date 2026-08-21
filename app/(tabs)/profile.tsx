@@ -4,58 +4,34 @@ import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Profile() {
-  const { user, updateUser, signOut } = useAuth();
+  const { user, updateUser, signOut, refreshUser, deleteAccount } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
-
-  // const handleUpdateProfileImage = async () => {
-  //   if (!user) return;
-  //   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  //   if (status !== "granted") {
-  //     Alert.alert(
-  //       "Permission needed",
-  //       "We need camera roll permissions to select a profile image.",
-  //     );
-  //     return;
-  //   }
-
-  //   const result = await ImagePicker.launchImageLibraryAsync({
-  //     mediaTypes: ["images"],
-  //     allowsEditing: true,
-  //     aspect: [1, 1],
-  //     quality: 0.8,
-  //   });
-  //   if (!result.canceled && result.assets[0]) {
-  //     setIsUpdating(true);
-  //     try {
-  //       const imageUrl = await uploadProfileImage(
-  //         user.id,
-  //         result.assets[0].uri,
-  //       );
-
-  //       await updateUser({ profileImage: imageUrl });
-  //       Alert.alert("Success", "Profile image updated.");
-  //     } catch (error) {
-  //       console.error("Error updating profile image:", error);
-  //       Alert.alert(
-  //         "Error",
-  //         "Failed to update profile image. Please try again.",
-  //       );
-  //     } finally {
-  //       setIsUpdating(false);
-  //     }
-  //   }
-  // };
-
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshUser();
+    } catch (error) {
+      console.error("Error refreshing profile:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const handleSignOut = async () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       {
@@ -73,9 +49,49 @@ export default function Profile() {
     ]);
   };
 
+  const handleDeleteAccount = async () => {
+  if (!user) return;
+
+  setIsDeleting(true);
+
+  try {
+    await deleteAccount(deleteReason);
+
+    setShowDeleteAccount(false);
+    setDeleteReason("");
+
+    Alert.alert(
+      "Account Deleted",
+      "Your account has been successfully deleted.",
+      [
+        {
+          text: "OK",
+          onPress: () => router.replace("/(auth)/login"),
+        },
+      ],
+    );
+  } catch (error) {
+    console.error("Error deleting account:", error);
+
+    Alert.alert(
+      "Error",
+      "Failed to delete your account. Please try again.",
+    );
+  } finally {
+    setIsDeleting(false);
+  }
+};
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+          />
+        }
+      >
         <View style={styles.profileSection}>
           <Link href="../details" asChild>
             <TouchableOpacity
@@ -155,9 +171,57 @@ export default function Profile() {
           >
             <Text style={styles.signOutText}>Sign Out</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.settingItem, styles.deleteButton]}>
-            <Text style={styles.deleteText}>Delete Account</Text>
-          </TouchableOpacity>
+          <TouchableOpacity
+  style={[styles.settingItem, styles.deleteButton]}
+  onPress={() => setShowDeleteAccount(true)}
+>
+  <Text style={styles.deleteText}>Delete Account</Text>
+</TouchableOpacity>
+{showDeleteAccount && (
+  <View style={styles.deleteAccountContainer}>
+    <Text style={styles.deleteAccountTitle}>
+      Delete your account?
+    </Text>
+
+    <Text style={styles.deleteAccountDescription}>
+      This action cannot be undone. If you'd like, tell us why you're
+      leaving.
+    </Text>
+
+    <TextInput
+      style={styles.deleteReasonInput}
+      placeholder="Reason (optional)"
+      placeholderTextColor="#999"
+      value={deleteReason}
+      onChangeText={setDeleteReason}
+      multiline
+      maxLength={250}
+    />
+
+    <TouchableOpacity
+      style={styles.confirmDeleteButton}
+      onPress={handleDeleteAccount}
+      disabled={isDeleting}
+    >
+      <Text style={styles.confirmDeleteText}>
+        {isDeleting ? "Deleting..." : "Confirm Delete Account"}
+      </Text>
+    </TouchableOpacity>
+
+    <TouchableOpacity
+      style={styles.cancelDeleteButton}
+      onPress={() => {
+        setShowDeleteAccount(false);
+        setDeleteReason("");
+      }}
+      disabled={isDeleting}
+    >
+      <Text style={styles.cancelDeleteText}>
+        Cancel
+      </Text>
+    </TouchableOpacity>
+  </View>
+)}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -273,4 +337,64 @@ const styles = StyleSheet.create({
     color: "#ff3b30",
     fontWeight: "500",
   },
+  deleteAccountContainer: {
+  marginTop: 10,
+  padding: 16,
+  backgroundColor: "#fff5f5",
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: "#ffcccc",
+},
+
+deleteAccountTitle: {
+  fontSize: 18,
+  fontWeight: "600",
+  color: "#000",
+  marginBottom: 8,
+},
+
+deleteAccountDescription: {
+  fontSize: 14,
+  color: "#666",
+  lineHeight: 20,
+  marginBottom: 12,
+},
+
+deleteReasonInput: {
+  minHeight: 80,
+  borderWidth: 1,
+  borderColor: "#ddd",
+  borderRadius: 10,
+  backgroundColor: "#fff",
+  padding: 12,
+  fontSize: 15,
+  color: "#000",
+  textAlignVertical: "top",
+  marginBottom: 12,
+},
+
+confirmDeleteButton: {
+  backgroundColor: "#ff3b30",
+  paddingVertical: 13,
+  borderRadius: 10,
+  alignItems: "center",
+  marginBottom: 8,
+},
+
+confirmDeleteText: {
+  color: "#fff",
+  fontSize: 15,
+  fontWeight: "600",
+},
+
+cancelDeleteButton: {
+  paddingVertical: 12,
+  alignItems: "center",
+},
+
+cancelDeleteText: {
+  color: "#666",
+  fontSize: 15,
+  fontWeight: "500",
+},
 });

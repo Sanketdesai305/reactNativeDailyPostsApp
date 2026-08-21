@@ -2,7 +2,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { Link, useRouter, useSegments } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import {
   Icon,
   Label,
@@ -47,16 +47,7 @@ export default function TabsLayout() {
   };
 
   const { user, isLoading, signOut } = useAuth();
-  const segments = useSegments();
 
-  const currentTab = segments[segments.length - 1];
-
-  const title =
-    currentTab === "chat"
-      ? "Chat"
-      : currentTab === "profile"
-        ? "Profile"
-        : "Home";
   const router = useRouter();
 
   useEffect(() => {
@@ -230,7 +221,7 @@ export default function TabsLayout() {
         </Modal>
         {/* TITLE */}
         <Text style={styles.title}>
-          {title}
+          NextJob
         </Text>
 
       </View>
