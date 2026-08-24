@@ -1,3 +1,4 @@
+import { useRequests } from "@/context/RequestContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -18,7 +19,7 @@ import {
 export default function Notifications() {
   const router = useRouter();
   const { getReceivedRequests, rejectRequest, acceptRequest } = usePosts();
-
+  const { getRequestCount } = useRequests();
   const [requests, setRequests] = useState<ReceivedRequest[]>([]);
 
   useEffect(() => {
@@ -35,8 +36,12 @@ export default function Notifications() {
 
     if (success) {
       setRequests((currentRequests) =>
-        currentRequests.filter((request) => request.id !== requestId),
+        currentRequests.filter(
+          (request) => request.id !== requestId
+        ),
       );
+
+      await getRequestCount();
     }
   };
 
@@ -45,8 +50,12 @@ export default function Notifications() {
 
     if (success) {
       setRequests((currentRequests) =>
-        currentRequests.filter((request) => request.id !== requestId),
+        currentRequests.filter(
+          (request) => request.id !== requestId
+        ),
       );
+
+      await getRequestCount();
     }
   };
   return (
@@ -109,6 +118,11 @@ export default function Notifications() {
 
             {/* BUTTONS */}
             <View style={styles.requestInfo}>
+
+              <Text style={styles.jobTitle}>
+                {request.post?.title || "Job"}
+              </Text>
+
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
                   style={styles.acceptButton}
@@ -128,6 +142,7 @@ export default function Notifications() {
                   </Text>
                 </TouchableOpacity>
               </View>
+
             </View>
 
           </View>
@@ -197,7 +212,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
-
+  jobTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 10,
+  },
   acceptButton: {
     backgroundColor: "#6C63FF",
     paddingHorizontal: 18,

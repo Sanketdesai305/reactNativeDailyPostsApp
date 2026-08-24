@@ -1,11 +1,12 @@
 "use client";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { RequestProvider } from "@/context/RequestContext";
+import { SearchProvider } from "@/context/SearchContext";
 import { Stack, useRouter, useSegments } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import NextJobSplash from "./components/NextJobSplash";
-
+import KelsaSplash from "./components/KelsaSplash";
 export default function RootLayout() {
   function RouteGuard() {
     const router = useRouter();
@@ -19,6 +20,8 @@ export default function RootLayout() {
     const inOnboarding = segments[0] === "onboarding";
     const inDetails = segments[0] === "details";
     const inChat = segments[0] === "chat";
+    const inHelpSupport = segments[0] === "help-support";
+    const inPrivacyPolicy = segments[0] === "privacy-policy";
     useEffect(() => {
       if (isLoading) {
         setShowOverlay(true);
@@ -30,10 +33,10 @@ export default function RootLayout() {
 
       if (!user && !inAuthGroup) {
         router.replace("/(auth)/login");
-      } else if (user && !inTabsGroup && !inNotifications && !inOnboarding && !inDetails && !inChat) {
+      } else if (user && !inTabsGroup && !inNotifications && !inOnboarding && !inDetails && !inChat && !inHelpSupport && !inPrivacyPolicy) {
         router.replace("/(tabs)");
       }
-    }, [user, isLoading, inAuthGroup, inTabsGroup, inNotifications, inOnboarding, inDetails, router, inChat]);
+    }, [user, isLoading, inAuthGroup, inTabsGroup, inNotifications, inOnboarding, inDetails, router, inChat, inHelpSupport, inPrivacyPolicy]);
 
     return (
       <>
@@ -54,7 +57,7 @@ export default function RootLayout() {
         </Stack>
         {showOverlay && (
           <View style={styles.overlay} pointerEvents="auto">
-            <NextJobSplash />
+            <KelsaSplash />
           </View>
         )}
       </>
@@ -62,9 +65,13 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
+<AuthProvider>
+  <SearchProvider>
+    <RequestProvider>
       <RouteGuard />
-    </AuthProvider>
+    </RequestProvider>
+  </SearchProvider>
+</AuthProvider>
   );
 }
 

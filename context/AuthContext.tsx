@@ -1,4 +1,7 @@
 import { supabase } from "@/lib/supabase/client";
+import { makeRedirectUri } from "expo-auth-session";
+import * as QueryParams from "expo-auth-session/build/QueryParams";
+import * as WebBrowser from "expo-web-browser";
 import {
   createContext,
   ReactNode,
@@ -7,7 +10,6 @@ import {
   useState,
 } from "react";
 import { Alert } from "react-native";
-
 export interface User {
   id: string;
   name: string;
@@ -22,14 +24,297 @@ interface AuthContextType {
   isLoading: boolean;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   updateUser: (userData: Partial<User>) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
   deleteAccount: (reason?: string) => Promise<void>;
 }
+interface AuthContextType {
+  user: User | null;
+  isLoading: boolean;
+
+  signUp: (
+    email: string,
+    password: string
+  ) => Promise<void>;
+
+  signIn: (
+    email: string,
+    password: string
+  ) => Promise<void>;
+
+  signInWithGoogle: () => Promise<void>;
+
+  updateUser: (
+    userData: Partial<User>
+  ) => Promise<void>;
+
+  signOut: () => Promise<void>;
+
+  refreshUser: () => Promise<void>;
+
+  deleteAccount: (
+    reason?: string
+  ) => Promise<void>;
+}
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const [user, setUser] = useState<User | null>(null);
+const fetchUserProfile = async (
+  userId: string
+): Promise<User | null> => {
+  try {
+    // Get authenticated user
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
+    if (!authUser) {
+      console.error("No auth user found");
+      return null;
+    }
+
+    // Google/user metadata
+    const googleName =
+      authUser.user_metadata?.full_name ??
+      authUser.user_metadata?.name ??
+      authUser.email?.split("@")[0] ??
+      "User";
+
+    const googlePicture =
+      authUser.user_metadata?.avatar_url ??
+      authUser.user_metadata?.picture ??
+      "";
+
+    // Get profile from your profiles table
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error fetching profile:", error);
+
+      // Fallback to Google/Auth information
+      return {
+        id: authUser.id,
+        name: googleName,
+        username: "",
+        email: authUser.email ?? "",
+        profileImage: googlePicture,
+        onboardingCompleted: false,
+      };
+    }
+
+    // Profile doesn't exist yet
+    if (!data) {
+      return {
+        id: authUser.id,
+        name: googleName,
+        username: "",
+        email: authUser.email ?? "",
+        profileImage: googlePicture,
+        onboardingCompleted: false,
+      };
+    }
+
+    // Profile exists
+    return {
+      id: data.id,
+
+      // Prefer your database value
+      // Fall back to Google information
+      name: data.name ?? googleName,
+
+      // Username should be your app's username
+      username: data.username ?? "",
+
+      email: authUser.email ?? "",
+
+      // Prefer your database image
+      // Fall back to Google profile picture
+      profileImage:
+        data.profile_image_url ?? googlePicture,
+
+      onboardingCompleted:
+        data.onboarding_completed ?? false,
+    };
+
+  } catch (error) {
+    console.error(
+      "Error in fetchUserProfile:",
+      error
+    );
+
+    return null;
+  }
+};
+const signInWithGoogle = async () => {
+  try {
+    const redirectTo = makeRedirectUri({
+      scheme: "kelsa",
+      path: "auth/callback",
+    });
+
+    console.log("Google redirect URL:", redirectTo);
+
+    const { data, error } =
+      await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data?.url) {
+      throw new Error(
+        "No Google OAuth URL was returned."
+      );
+    }
+
+    console.log("Opening Google OAuth...");
+
+    const result =
+      await WebBrowser.openAuthSessionAsync(
+        data.url,
+        redirectTo
+      );
+
+    console.log("OAuth result:", result);
+
+    if (result.type !== "success") {
+      throw new Error(
+        "Google authentication was cancelled."
+      );
+    }
+
+    const { params, errorCode } =
+      QueryParams.getQueryParams(result.url);
+
+    if (errorCode) {
+      throw new Error(errorCode);
+    }
+
+    const {
+      access_token,
+      refresh_token,
+    } = params;
+
+    if (!access_token || !refresh_token) {
+      throw new Error(
+        "Google authentication succeeded, but no session tokens were returned."
+      );
+    }
+
+    const {
+      data: sessionData,
+      error: sessionError,
+    } = await supabase.auth.setSession({
+      access_token,
+      refresh_token,
+    });
+
+    if (sessionError) {
+      throw sessionError;
+    }
+
+    if (!sessionData.session?.user) {
+      throw new Error(
+        "No authenticated user returned from Google."
+      );
+    }
+
+    console.log(
+      "Google login successful:",
+      sessionData.session.user.id
+    );
+
+    // Load your profile
+    const profile = await fetchUserProfile(
+      sessionData.session.user.id
+    );
+
+    if (profile) {
+      setUser(profile);
+    } else {
+      // Fallback profile using Google metadata
+      const googleUser =
+        sessionData.session.user;
+
+      const metadata =
+        googleUser.user_metadata ?? {};
+
+      setUser({
+        id: googleUser.id,
+
+        name:
+          metadata.full_name ??
+          metadata.name ??
+          googleUser.email?.split("@")[0] ??
+          "User",
+
+        username:
+          metadata.user_name ??
+          googleUser.email?.split("@")[0] ??
+          "user",
+
+        email:
+          googleUser.email ?? "",
+
+        profileImage:
+          metadata.avatar_url ??
+          metadata.picture ??
+          "",
+
+        onboardingCompleted: false,
+      });
+    }
+
+  } catch (error: any) {
+    console.error(
+      "Google sign in error:",
+      error
+    );
+
+    Alert.alert(
+      "Google Sign In Failed",
+      error?.message ??
+        "Unable to sign in with Google."
+    );
+
+    throw error;
+  }
+};
+const resetPassword = async (email: string) => {
+  if (!email.trim()) {
+    throw new Error("Please enter your email address.");
+  }
+
+  const { error } =
+    await supabase.auth.resetPasswordForEmail(
+      email.trim(),
+      {
+        redirectTo: "nextjob://reset-password",
+      }
+    );
+
+  if (error) {
+    console.error(
+      "Password reset error:",
+      error
+    );
+    throw error;
+  }
+};
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,65 +361,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-
-  const fetchUserProfile = async (userId: string): Promise<User | null> => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (error) {
-        console.error("Error fetching profile:", error);
-        const authUser = await supabase.auth.getUser();
-        if (authUser.data.user) {
-          return {
-            id: authUser.data.user.id,
-            name: authUser.data.user.email?.split("@")[0] ?? "User",
-            username: authUser.data.user.email?.split("@")[0] ?? "user",
-            email: authUser.data.user.email ?? "",
-            profileImage: "",
-            onboardingCompleted: false,
-          };
-        }
-        return null;
-      }
-
-      if (!data) {
-        const authUser = await supabase.auth.getUser();
-        if (authUser.data.user) {
-          return {
-            id: authUser.data.user.id,
-            name: authUser.data.user.email?.split("@")[0] ?? "User",
-            username: authUser.data.user.email?.split("@")[0] ?? "user",
-            email: authUser.data.user.email ?? "",
-            profileImage: "",
-            onboardingCompleted: false,
-          };
-        }
-        return null;
-      }
-
-      const authUser = await supabase.auth.getUser();
-      if (!authUser.data.user) {
-        console.error("No auth user found");
-        return null;
-      }
-
-      return {
-        id: data.id,
-        name: data.name ?? authUser.data.user.email?.split("@")[0] ?? "User",
-        username: data.username ?? authUser.data.user.email?.split("@")[0] ?? "user",
-        email: authUser.data.user.email || "",
-        profileImage: data.profile_image_url,
-        onboardingCompleted: data.onboarding_completed,
-      };
-    } catch (error) {
-      console.error("Error in fetchUserProfile:", error);
-      return null;
-    }
-  };
 
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -237,7 +463,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
   return (
     <AuthContext.Provider
-      value={{ user, signUp, updateUser, signIn, signOut, isLoading, refreshUser, deleteAccount }}
+      value={{ user, signUp, updateUser, signIn, signOut, isLoading, refreshUser, deleteAccount,signInWithGoogle,resetPassword, }}
     >
       {children}
     </AuthContext.Provider>

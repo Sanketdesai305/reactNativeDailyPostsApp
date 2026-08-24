@@ -148,7 +148,7 @@ export default function Profile() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity style={styles.settingItem}  onPress={() => router.push("/help-support")}>
             <Text style={styles.settingLabel}>Help & Support</Text>
             <Text style={styles.settingValue}>→</Text>
           </TouchableOpacity>
@@ -158,7 +158,7 @@ export default function Profile() {
             <Text style={styles.settingValue}>→</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity style={styles.settingItem}  onPress={() => router.push("/privacy-policy")}>
             <Text style={styles.settingLabel}>Privacy Policy</Text>
             <Text style={styles.settingValue}>→</Text>
           </TouchableOpacity>

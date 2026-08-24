@@ -1,5 +1,7 @@
 "use client";
 import { useAuth } from "@/context/AuthContext";
+import { useRequests } from "@/context/RequestContext";
+import { useSearch } from "@/context/SearchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { Link, useRouter } from "expo-router";
@@ -20,13 +22,17 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
+import SearchBar from "../components/SearchBar";
 export default function TabsLayout() {
   const [menuVisible, setMenuVisible] = useState(false);
-
+  const [searchOpen, setSearchOpen] = useState(false);
   const drawerWidth = Dimensions.get("window").width * 0.7;
   const drawerAnimation = useRef(new Animated.Value(-drawerWidth)).current;
-
+  const {
+    searchQuery,
+    setSearchQuery,
+    clearSearch,
+  } = useSearch();
   const openMenu = () => {
     setMenuVisible(true);
     Animated.timing(drawerAnimation, {
@@ -47,7 +53,7 @@ export default function TabsLayout() {
   };
 
   const { user, isLoading, signOut } = useAuth();
-
+  const { requestCount } = useRequests();
   const router = useRouter();
 
   useEffect(() => {
@@ -64,233 +70,287 @@ export default function TabsLayout() {
   };
 
   return (
-    <SafeAreaView style={{flex:1}} edges={["top"]}>
-    <View style={styles.container}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+      <View style={styles.container}>
 
-      {/* TOP NAVIGATION BAR */}
-      <View style={styles.topBar}>
+        {/* TOP NAVIGATION BAR */}
+        <View style={styles.topBar}>
 
-        {/* HAMBURGER */}
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={openMenu}
-        >
-          <Ionicons
-            name="menu"
-            size={28}
-            color="#333"
-          />
-        </TouchableOpacity>
-
-        {/* HAMBURGER MENU */}
-        <Modal
-          visible={menuVisible}
-          transparent
-          animationType="none"
-          onRequestClose={closeMenu}
-        >
-          <View style={styles.menuOverlay}>
-            <TouchableOpacity
-              style={styles.menuBackdrop}
-              onPress={closeMenu}
+          {/* HAMBURGER */}
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={openMenu}
+          >
+            <Ionicons
+              name="menu"
+              size={28}
+              color="#333"
             />
+          </TouchableOpacity>
 
-            <Animated.View
-              style={[
-                styles.sideMenu,
-                { transform: [{ translateX: drawerAnimation }] },
-              ]}
-            >
-              <View style={styles.menuHeader}>
-                <TouchableOpacity
-                  onPress={closeMenu}
-                  style={styles.backButton}
-                >
-                  <Ionicons
-                    name="arrow-back"
-                    size={28}
-                    color="#333"
-                  />
-                </TouchableOpacity>
+          {/* HAMBURGER MENU */}
+          <Modal
+            visible={menuVisible}
+            transparent
+            animationType="none"
+            onRequestClose={closeMenu}
+          >
+            <View style={styles.menuOverlay}>
+              <TouchableOpacity
+                style={styles.menuBackdrop}
+                onPress={closeMenu}
+              />
 
-                <Text style={styles.menuTitle}>Menu</Text>
-              </View>
-
-              <Link href="/details" asChild>
-              <TouchableOpacity>
-                <View style={styles.menuProfile}>
-                  {user?.profileImage ? (
-                    <Image
-                      source={{ uri: user.profileImage }}
-                      style={styles.menuProfileImage}
-                      cachePolicy="none"
+              <Animated.View
+                style={[
+                  styles.sideMenu,
+                  { transform: [{ translateX: drawerAnimation }] },
+                ]}
+              >
+                <View style={styles.menuHeader}>
+                  <TouchableOpacity
+                    onPress={closeMenu}
+                    style={styles.backButton}
+                  >
+                    <Ionicons
+                      name="arrow-back"
+                      size={28}
+                      color="#333"
                     />
-                  ) : (
-                    <View
-                      style={[
-                        styles.menuProfileImage,
-                        styles.menuProfilePlaceholder,
-                      ]}
-                    >
-                      <Text style={styles.menuProfileInitial}>
-                        {user?.name?.[0]?.toUpperCase() || "U"}
+                  </TouchableOpacity>
+
+                  <Text style={styles.menuTitle}>Menu</Text>
+                </View>
+
+                <Link href="/details" asChild>
+                  <TouchableOpacity>
+                    <View style={styles.menuProfile}>
+                      {user?.profileImage ? (
+                        <Image
+                          source={{ uri: user.profileImage }}
+                          style={styles.menuProfileImage}
+                          cachePolicy="none"
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.menuProfileImage,
+                            styles.menuProfilePlaceholder,
+                          ]}
+                        >
+                          <Text style={styles.menuProfileInitial}>
+                            {user?.name?.[0]?.toUpperCase() || "U"}
+                          </Text>
+                        </View>
+                      )}
+
+                      <Text style={styles.menuProfileName}>
+                        {user?.name || "User"}
                       </Text>
                     </View>
-                  )}
+                  </TouchableOpacity>
+                </Link>
 
-                  <Text style={styles.menuProfileName}>
-                    {user?.name || "User"}
-                  </Text>
-                </View>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeMenu();
+                    router.push("/(tabs)");
+                  }}
+                >
+                  <Ionicons
+                    name="home-outline"
+                    size={23}
+                    color="#333"
+                  />
+                  <Text style={styles.menuItemText}>Home</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeMenu();
+                    router.push("/notifications");
+                  }}
+                >
+                  <Ionicons
+                    name="notifications-outline"
+                    size={24}
+                    color="#333"
+                  />
+                  <Text style={styles.menuItemText}>Notifications</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeMenu();
+                    router.push("/chat");
+                  }}
+                >
+                  <Ionicons
+                    name="chatbubble-outline"
+                    size={24}
+                    color="#333"
+                  />
+                  <Text style={styles.menuItemText}>Chat</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeMenu();
+                    router.push("/onboarding");
+                  }}
+                >
+                  <Ionicons
+                    name="person-outline"
+                    size={24}
+                    color="#333"
+                  />
+                  <Text style={styles.menuItemText}>Edit Profile</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={handleLogout}
+                >
+                  <Ionicons
+                    name="log-out-outline"
+                    size={24}
+                    color="#333"
+                  />
+                  <Text style={styles.menuItemText}>Logout</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            </View>
+          </Modal>
+          {/* TITLE */}
+          {searchOpen ? (
+            <SearchBar
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onClose={() => {
+                clearSearch();
+                setSearchOpen(false);
+              }}
+            />
+          ) : (
+            <>
+              <Link href="/(tabs)">
+                <Text style={styles.title}>
+                  <Image
+                    source={require("@/assets/images/android-icon-monochrome.png")}
+                    style={{
+                      width: 25,
+                      height: 16,
+                    }}
+                    contentFit="contain"
+                  />{" "}
+                  kelsa
+                </Text>
               </Link>
 
               <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  closeMenu();
-                  router.push("/(tabs)");
-                }}
+                style={styles.searchButton}
+                onPress={() => setSearchOpen(true)}
               >
                 <Ionicons
-                  name="home-outline"
-                  size={23}
-                  color="#333"
-                />
-                <Text style={styles.menuItemText}>Home</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  closeMenu();
-                  router.push("/notifications");
-                }}
-              >
-                <Ionicons
-                  name="notifications-outline"
+                  name="search"
                   size={24}
                   color="#333"
                 />
-                <Text style={styles.menuItemText}>Notifications</Text>
               </TouchableOpacity>
+            </>
+          )}
 
-               <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  closeMenu();
-                  router.push("/chat");
-                }}
-              >
-                <Ionicons
-                  name="chatbubble-outline"
-                  size={24}
-                  color="#333"
-                />
-                <Text style={styles.menuItemText}>Chat</Text>
-              </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.notificationButton}
+            onPress={() => router.push("/notifications")}
+          >
+            <Ionicons
+              name="notifications-outline"
+              size={25}
+              color="#333"
+            />
 
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  closeMenu();
-                  router.push("/onboarding");
-                }}
-              >
-                <Ionicons
-                  name="person-outline"
-                  size={24}
-                  color="#333"
-                />
-                <Text style={styles.menuItemText}>Edit Profile</Text>
-              </TouchableOpacity>
+            {requestCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {requestCount > 99
+                    ? "99+"
+                    : requestCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
 
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={handleLogout}
-              >
-                <Ionicons
-                  name="log-out-outline"
-                  size={24}
-                  color="#333"
-                />
-                <Text style={styles.menuItemText}>Logout</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          </View>
-        </Modal>
-        {/* TITLE */}
-        <Text style={styles.title}>
-          NextJob
-        </Text>
+        {/* BOTTOM TABS */}
+        <View style={styles.tabsContainer}>
+          <NativeTabs
+            backgroundColor="rgba(255, 255, 255, 0.1)"
+            iconColor={{
+              default: "#8E8E93",
+              selected: "#6C63FF",
+            }}
+            labelStyle={{
+              default: {
+                color: "#8E8E93",
+                fontSize: 11,
+              },
+              selected: {
+                color: "#6C63FF",
+                fontSize: 11,
+              },
+            }}
+            indicatorColor="#a4a0ed"
+            blurEffect="systemMaterial"
+          >
+
+            {/* HOME */}
+            <NativeTabs.Trigger name="index">
+              <Icon
+                src={
+                  <VectorIcon
+                    family={Ionicons}
+                    name="home"
+                  />
+                }
+              />
+              <Label>Home</Label>
+            </NativeTabs.Trigger>
+
+            {/* CHAT */}
+            <NativeTabs.Trigger name="chat">
+              <Icon
+                src={
+                  <VectorIcon
+                    family={Ionicons}
+                    name="chatbubble"
+                  />
+                }
+              />
+              <Label>Chat</Label>
+            </NativeTabs.Trigger>
+
+            {/* PROFILE */}
+            <NativeTabs.Trigger name="profile">
+              <Icon
+                src={
+                  <VectorIcon
+                    family={Ionicons}
+                    name="person"
+                  />
+                }
+              />
+              <Label>Profile</Label>
+            </NativeTabs.Trigger>
+
+          </NativeTabs>
+        </View>
 
       </View>
-
-      {/* BOTTOM TABS */}
-      <View style={styles.tabsContainer}>
-        <NativeTabs
-          backgroundColor="rgba(255, 255, 255, 0.1)"
-          iconColor={{
-            default: "#8E8E93",
-            selected: "#6C63FF",
-          }}
-          labelStyle={{
-            default: {
-              color: "#8E8E93",
-              fontSize: 11,
-            },
-            selected: {
-              color: "#6C63FF",
-              fontSize: 11,
-            },
-          }}
-          indicatorColor="#a4a0ed"
-          blurEffect="systemMaterial"
-        >
-
-          {/* HOME */}
-          <NativeTabs.Trigger name="index">
-            <Icon
-              src={
-                <VectorIcon
-                  family={Ionicons}
-                  name="home"
-                />
-              }
-            />
-            <Label>Home</Label>
-          </NativeTabs.Trigger>
-
-          {/* CHAT */}
-          <NativeTabs.Trigger name="chat">
-            <Icon
-              src={
-                <VectorIcon
-                  family={Ionicons}
-                  name="chatbubble"
-                />
-              }
-            />
-            <Label>Chat</Label>
-          </NativeTabs.Trigger>
-
-          {/* PROFILE */}
-          <NativeTabs.Trigger name="profile">
-            <Icon
-              src={
-                <VectorIcon
-                  family={Ionicons}
-                  name="person"
-                />
-              }
-            />
-            <Label>Profile</Label>
-          </NativeTabs.Trigger>
-
-        </NativeTabs>
-      </View>
-
-    </View>
     </SafeAreaView>
   );
 }
@@ -416,57 +476,83 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
 
-menuProfile: {
-  alignItems: "center",
-  paddingBottom: 30,
-  borderBottomWidth: 1,
-  borderBottomColor: "#eee",
-  marginBottom: 15,
-},
+  menuProfile: {
+    alignItems: "flex-start",
+    paddingBottom: 30,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+    marginBottom: 15,
+  },
 
-menuProfileImage: {
-  width: 90,
-  height: 90,
-  borderRadius: 45,
-  marginBottom: 12,
-},
+  menuProfileImage: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    marginBottom: 12,
+  },
 
-menuProfilePlaceholder: {
-  backgroundColor: "#eee",
-  justifyContent: "center",
-  alignItems: "center",
-},
+  menuProfilePlaceholder: {
+    backgroundColor: "#eee",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  notificationButton: {
+    position: "relative",
+    padding: 7,
+    marginLeft: 4,
+  },
 
-menuProfileInitial: {
-  fontSize: 36,
-  fontWeight: "600",
-  color: "#777",
-},
+  notificationBadge: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    backgroundColor: "#FF3B30",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
 
-menuProfileName: {
-  fontSize: 20,
-  fontWeight: "600",
-},
+  notificationBadgeText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  menuProfileInitial: {
+    fontSize: 36,
+    fontWeight: "600",
+    color: "#777",
+  },
 
-menuItemText: {
-  fontSize: 16,
-  marginLeft:5
-},
+  menuProfileName: {
+    fontSize: 20,
+    fontWeight: "600",
+  },
 
-menuHeader: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginBottom: 25,
-},
+  menuItemText: {
+    fontSize: 16,
+    marginLeft: 5
+  },
 
-backButton: {
-  padding: 5,
-},
+  menuHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 25,
+  },
 
-menuTitle: {
-  fontSize: 22,
-  fontWeight: "600",
-  marginLeft: 15,
-},
+  backButton: {
+    padding: 5,
+  },
 
+  menuTitle: {
+    fontSize: 22,
+    fontWeight: "600",
+    marginLeft: 15,
+  },
+  searchButton: {
+    marginLeft: "auto",
+    padding: 6,
+  },
 });

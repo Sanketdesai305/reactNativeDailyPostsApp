@@ -32,11 +32,15 @@ export default function Details() {
       const { data, error } = await supabase
         .from("profiles")
         .select(`
-        id,
-        name,
-        username,
-        profile_image_url
-      `)
+          id,
+          name,
+          username,
+          profile_image_url,
+          bio,
+          location,
+          skills,
+          experience
+        `)
         .eq("id", profileUserId)
         .single();
 
@@ -121,7 +125,7 @@ export default function Details() {
               </Text>
 
               <Text style={styles.value}>
-                {profile?.name || "Not provided"}
+                {profile?.name || ""}
               </Text>
             </View>
           </View>
@@ -142,14 +146,11 @@ export default function Details() {
               </Text>
 
               <Text style={styles.value}>
-                @{profile?.username || "Not provided"}
+                @{profile?.username || ""}
               </Text>
             </View>
           </View>
-
-        </View>
-
-        {/* EMAIL */}
+                  {/* EMAIL */}
         {isOwnProfile && (
           <View style={styles.infoRow}>
             <View style={styles.iconContainer}>
@@ -166,11 +167,140 @@ export default function Details() {
               </Text>
 
               <Text style={styles.value}>
-                {user?.email || "Not provided"}
+                {user?.email || ""}
               </Text>
             </View>
           </View>
         )}
+        </View>
+        {/* ABOUT */}
+
+        {(profile?.bio ||
+          profile?.location ||
+          profile?.skills ||
+          profile?.experience) && (
+            <View style={styles.card}>
+
+              <Text style={styles.sectionTitle}>
+                About
+              </Text>
+
+              {/* BIO */}
+
+              {profile?.bio && (
+                <View style={styles.aboutSection}>
+                  <View style={styles.aboutHeader}>
+                    <View style={styles.iconContainer}>
+                      <Ionicons
+                        name="person-circle-outline"
+                        size={22}
+                        color="#6C63FF"
+                      />
+                    </View>
+
+                    <Text style={styles.label}>
+                      About Me
+                    </Text>
+                  </View>
+
+                  <Text style={styles.aboutText}>
+                    {profile.bio}
+                  </Text>
+                </View>
+              )}
+
+              {/* LOCATION */}
+
+              {profile?.location && (
+                <View style={styles.infoRow}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons
+                      name="location-outline"
+                      size={22}
+                      color="#6C63FF"
+                    />
+                  </View>
+
+                  <View style={styles.infoContent}>
+                    <Text style={styles.label}>
+                      Location
+                    </Text>
+
+                    <Text style={styles.value}>
+                      {profile.location}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* SKILLS */}
+
+              {profile?.skills && (
+                <View style={styles.aboutSection}>
+                  <View style={styles.aboutHeader}>
+                    <View style={styles.iconContainer}>
+                      <Ionicons
+                        name="construct-outline"
+                        size={22}
+                        color="#6C63FF"
+                      />
+                    </View>
+
+                    <Text style={styles.label}>
+                      Skills
+                    </Text>
+                  </View>
+
+                  <View style={styles.skillsContainer}>
+                    {profile.skills
+                      .split(",")
+                      .map(
+                        (
+                          skill: string,
+                          index: number
+                        ) => (
+                          <View
+                            key={index}
+                            style={styles.skillChip}
+                          >
+                            <Text style={styles.skillText}>
+                              {skill.trim()}
+                            </Text>
+                          </View>
+                        )
+                      )}
+                  </View>
+                </View>
+              )}
+
+              {/* EXPERIENCE */}
+
+              {profile?.experience && (
+                <View style={styles.aboutSection}>
+                  <View style={styles.aboutHeader}>
+                    <View style={styles.iconContainer}>
+                      <Ionicons
+                        name="briefcase-outline"
+                        size={22}
+                        color="#6C63FF"
+                      />
+                    </View>
+
+                    <Text style={styles.label}>
+                      Experience
+                    </Text>
+                  </View>
+
+                  <Text style={styles.aboutText}>
+                    {profile.experience}
+                  </Text>
+                </View>
+              )}
+
+            </View>
+          )}
+
+
 
         {/* ACCOUNT CARD */}
         {isOwnProfile && (
@@ -259,9 +389,9 @@ const styles = StyleSheet.create({
   },
 
   profileImage: {
-    width: "100%",
-    height: 200,
-    borderRadius: 0,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     marginBottom: 15,
   },
 
@@ -286,7 +416,42 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#222",
   },
+  aboutSection: {
+    marginBottom: 20,
+  },
 
+  aboutHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+
+  aboutText: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: "#555",
+    marginLeft: 56,
+  },
+
+  skillsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginLeft: 56,
+  },
+
+  skillChip: {
+    backgroundColor: "#f0efff",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+
+  skillText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#6C63FF",
+  },
   username: {
     fontSize: 16,
     color: "#777",

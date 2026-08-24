@@ -1,4 +1,5 @@
 import { useAuth } from "@/context/AuthContext";
+import { useSearch } from "@/context/SearchContext";
 import { formatTimeAgo, formatTimeRemaining } from "@/lib/date-helper";
 import { supabase } from "@/lib/supabase/client";
 import { Ionicons } from '@expo/vector-icons';
@@ -12,29 +13,27 @@ import {
   Alert,
   FlatList,
   Modal,
-  RefreshControl,
-  StyleSheet,
+  RefreshControl, ScrollView, StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Post, usePosts } from "../hooks/usePosts";
 interface PostCardProps {
   post: Post;
   currentUserId?: string;
-  requestCount: number;
   sendRequest: (receiverId: string, postId: string) => Promise<boolean>;
 }
 
-const PostCard = ({ post, currentUserId,requestCount,sendRequest }: PostCardProps) => {
+const PostCard = ({ post, currentUserId,  sendRequest }: PostCardProps) => {
   const [requestSent, setRequestSent] = useState(false);
   const postUser = post.profiles;
   const isOwnPost = post.user_id === currentUserId;
   const router = useRouter();
 
-    useEffect(() => {
+  useEffect(() => {
     const checkRequestStatus = async () => {
       if (!currentUserId || isOwnPost) {
         return;
@@ -45,7 +44,7 @@ const PostCard = ({ post, currentUserId,requestCount,sendRequest }: PostCardProp
         .select("id")
         .eq("post_id", post.id)
         .eq("sender_id", currentUserId)
-        .eq("status","pending")
+        .eq("status", "pending")
         .maybeSingle();
 
       if (error) {
@@ -58,8 +57,8 @@ const PostCard = ({ post, currentUserId,requestCount,sendRequest }: PostCardProp
 
     checkRequestStatus();
   }, [currentUserId, post.id, isOwnPost]);
-  
- const sendRequestFunc = async () => {
+
+  const sendRequestFunc = async () => {
     const success = await sendRequest(post.user_id, post.id);
 
     if (success) {
@@ -70,8 +69,8 @@ const PostCard = ({ post, currentUserId,requestCount,sendRequest }: PostCardProp
     <View style={styles.postContainer}>
       <View style={styles.postHeader}>
 
-          <TouchableOpacity
-           onPress={() =>
+        <TouchableOpacity
+          onPress={() =>
             router.push({
               pathname: "/details",
               params: {
@@ -79,7 +78,7 @@ const PostCard = ({ post, currentUserId,requestCount,sendRequest }: PostCardProp
               },
             })
           }
-          >
+        >
           <View style={styles.userInfo}>
             {postUser?.profile_image_url ? (
               <Image
@@ -102,54 +101,163 @@ const PostCard = ({ post, currentUserId,requestCount,sendRequest }: PostCardProp
               <Text style={styles.timeAgo}>{formatTimeAgo(post.created_at)}</Text>
             </View>
           </View>
-          </TouchableOpacity>
+        </TouchableOpacity>
         {/* Post content */}
         <View style={styles.timeRemainingBadge}>
-                    {isOwnPost && (
-            <TouchableOpacity style={styles.bell}
-            onPress={() => router.push("/notifications")}>
-              <Ionicons
-                name="notifications"
-                size={28}
-                style={styles.bellIcon}
-              />
-
-               {requestCount > 0 && (
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationBadgeText}>
-                     {requestCount > 99 ? "99+" : requestCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
           <Text style={styles.timeRemainingText}>
             {formatTimeRemaining(post.expires_at)}
           </Text>
         </View>
       </View>
 
-      <Image
-        cachePolicy={"none"}
-        source={{ uri: post.image_url }}
-        style={styles.postImage}
-        contentFit="cover"
-      />
+      {post.image_url ? (
+        <Image
+          cachePolicy="none"
+          source={{ uri: post.image_url }}
+          style={styles.postImage}
+          contentFit="cover"
+        />
+      ) : (
+        <View style={styles.noImageContainer}>
+          <Ionicons
+            name="briefcase-outline"
+            size={40}
+            color="#aaa"
+          />
+        </View>
+      )}
 
       <View style={styles.postFooter}>
+
+        {/* JOB TITLE */}
+        <Text style={styles.jobTitle}>
+          {post.title}
+        </Text>
+
+        {/* DESCRIPTION */}
         {post.description && (
-          <Text style={styles.postDescription}>{post.description}</Text>
+          <Text style={styles.postDescription}>
+            {post.description}
+          </Text>
         )}
+
+        {/* JOB DETAILS */}
+        <View style={styles.jobDetails}>
+
+          {/* TASK TYPE */}
+          <View style={styles.detailItem}>
+            <Ionicons
+              name={
+                post.task_type === "multiple"
+                  ? "list"
+                  : "checkmark-circle-outline"
+              }
+              size={18}
+              color="#6C63FF"
+            />
+
+            <Text style={styles.detailText}>
+              {post.task_type === "multiple"
+                ? "Multiple tasks"
+                : "Single task"}
+            </Text>
+          </View>
+
+          {/* BUDGET */}
+          {post.budget !== null &&
+            post.budget !== undefined && (
+              <View style={styles.detailItem}>
+                <Ionicons
+                  name="cash-outline"
+                  size={18}
+                  color="#6C63FF"
+                />
+
+                <Text style={styles.detailText}>
+                  ₹{post.budget.toLocaleString("en-IN")}
+                </Text>
+
+                {post.is_negotiable && (
+                  <Text style={styles.negotiable}>
+                    Negotiable
+                  </Text>
+                )}
+              </View>
+            )}
+
+          {/* DURATION */}
+          {post.duration_hours !== null &&
+            post.duration_hours !== undefined && (
+              <View style={styles.detailItem}>
+                <Ionicons
+                  name="time-outline"
+                  size={18}
+                  color="#6C63FF"
+                />
+
+                <Text style={styles.detailText}>
+                  {post.duration_hours}{" "}
+                  {post.duration_hours === 1
+                    ? "hour"
+                    : "hours"}
+                </Text>
+              </View>
+            )}
+
+          {/* LOCATION */}
+          {post.location && (
+            <View style={styles.detailItem}>
+              <Ionicons
+                name="location-outline"
+                size={18}
+                color="#6C63FF"
+              />
+
+              <Text style={styles.detailText}>
+                {post.location}
+              </Text>
+            </View>
+          )}
+
+        </View>
+
+        {/* REQUIREMENTS */}
+        {post.requirements && (
+          <View style={styles.requirementsContainer}>
+            <Text style={styles.requirementsTitle}>
+              Requirements
+            </Text>
+
+            <Text style={styles.requirementsText}>
+              {post.requirements}
+            </Text>
+          </View>
+        )}
+
+        {/* POST INFO */}
         <Text style={styles.postInfo}>
-          {isOwnPost ? "Your Post" : `${postUser?.name}' post`} • Expires in{" "}
+          {isOwnPost
+            ? "Your Post"
+            : `${postUser?.name}' post`}
+          {" • "}
+          Expires in{" "}
           {formatTimeRemaining(post.expires_at)}
         </Text>
-        {!isOwnPost && <TouchableOpacity onPress={sendRequestFunc} style={styles.SendRequestButton}>
-          <Text style={styles.SendRequestText}>
-             {requestSent ? "Sent" : "Send Request"}
-          </Text>
-        </TouchableOpacity>}
+
+        {/* SEND REQUEST */}
+        {!isOwnPost && (
+          <TouchableOpacity
+            onPress={sendRequestFunc}
+            style={styles.SendRequestButton}
+          >
+            <Text style={styles.SendRequestText}>
+              {requestSent ? "Sent" : "Send Request"}
+            </Text>
+          </TouchableOpacity>
+        )}
+
       </View>
+
     </View>
   );
 };
@@ -160,19 +268,26 @@ export default function Index() {
   const [description, setDescription] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-
+  const [title, setTitle] = useState("");
+  const [taskType, setTaskType] = useState<"single" | "multiple">("single");
+  const [budget, setBudget] = useState("");
+  const [isNegotiable, setIsNegotiable] = useState(true);
+  const [durationHours, setDurationHours] = useState("");
+  const [requirements, setRequirements] = useState("");
+  const [location, setLocation] = useState("");
   const router = useRouter();
   // const { createPost, posts, refreshPosts } = usePosts();
   const {
-  createPost,
-  posts,
-  refreshPosts,
-  sendRequest,
-  requestCount,
-} = usePosts();
+    createPost,
+    posts,
+    refreshPosts,
+    sendRequest,
+  } = usePosts();
   const { user } = useAuth();
-
-    const isFocused = useIsFocused();
+  const {
+    searchQuery
+  } = useSearch();
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     if (isFocused && user) {
@@ -200,6 +315,20 @@ export default function Index() {
     }
   };
 
+  const filteredPosts = posts.filter((post) => {
+    const query = searchQuery.trim().toLowerCase();
+
+    if (!query) {
+      return true;
+    }
+
+    return (
+      post.title?.toLowerCase().includes(query) ||
+      post.description?.toLowerCase().includes(query) ||
+      post.requirements?.toLowerCase().includes(query) ||
+      post.location?.toLowerCase().includes(query)
+    );
+  });
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -254,36 +383,106 @@ export default function Index() {
   };
 
   const handlePost = async () => {
-    if (!previewImage) return;
+    if (!title.trim()) {
+      Alert.alert(
+        "Missing title",
+        "Please enter a job title."
+      );
+      return;
+    }
+
+    if (!description.trim()) {
+      Alert.alert(
+        "Missing description",
+        "Please describe the job."
+      );
+      return;
+    }
+
+    if (!budget.trim()) {
+      Alert.alert(
+        "Missing budget",
+        "Please enter a budget."
+      );
+      return;
+    }
+
+    const budgetNumber = Number(budget);
+
+    if (isNaN(budgetNumber) || budgetNumber <= 0) {
+      Alert.alert(
+        "Invalid budget",
+        "Please enter a valid budget."
+      );
+      return;
+    }
+
+    const durationNumber = durationHours.trim()
+      ? Number(durationHours)
+      : undefined;
+
+    if (
+      durationNumber !== undefined &&
+      (isNaN(durationNumber) || durationNumber <= 0)
+    ) {
+      Alert.alert(
+        "Invalid duration",
+        "Please enter a valid number of hours."
+      );
+      return;
+    }
 
     setIsUploading(true);
+
     try {
-      await createPost(previewImage, description);
+      await createPost({
+        imageUri: previewImage ?? undefined,
+        title: title.trim(),
+        description: description.trim(),
+        taskType,
+        budget: budgetNumber,
+        isNegotiable,
+        durationHours: durationNumber,
+        requirements: requirements.trim() || undefined,
+        location: location.trim() || undefined,
+      });
+
       setPreviewImage(null);
+      setTitle("");
       setDescription("");
+      setTaskType("single");
+      setBudget("");
+      setIsNegotiable(true);
+      setDurationHours("");
+      setRequirements("");
+      setLocation("");
       setShowPreview(false);
+
     } catch (error) {
       console.error("Error creating post:", error);
-      Alert.alert("Error", "Failed to create post. Please try again.");
+
+      Alert.alert(
+        "Error",
+        "Failed to create post. Please try again."
+      );
     } finally {
       setIsUploading(false);
     }
   };
 
- const renderPost = ({ item }: { item: Post }) => (
-  <PostCard
-    post={item}
-    currentUserId={user?.id}
-    requestCount={requestCount}
-    sendRequest={sendRequest}
-  />
-);
+  const renderPost = ({ item }: { item: Post }) => (
+    <PostCard
+      post={item}
+      currentUserId={user?.id}
+      sendRequest={sendRequest}
+    />
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom", "top"]}>
       {/* LIST */}
       <FlatList
-        data={posts}
+        data={filteredPosts}
         renderItem={renderPost}
         keyExtractor={(item) => item.id}
         contentContainerStyle={
@@ -295,28 +494,46 @@ export default function Index() {
         }
       />
 
-      <TouchableOpacity style={styles.fab} onPress={showImagePicker}>
+      <TouchableOpacity style={styles.fab} onPress={() => setShowPreview(true)}>
         <Text style={styles.fabText}>{hasActivePost ? "♻" : "+"}</Text>
       </TouchableOpacity>
 
-      <Modal visible={showPreview} transparent animationType="fade">
+      <Modal
+        visible={showPreview}
+        transparent
+        animationType="slide"
+      >
         <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
+          <ScrollView
+            style={styles.modalContent}
+            contentContainerStyle={styles.modalScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+
             <Text style={styles.modalTitle}>
-              {" "}
-              {hasActivePost ? "Replace Your Post" : "Preview Your Post"}
+              {hasActivePost ? "Replace Your Job" : "Post a Job"}
             </Text>
-            {previewImage && (
-              <Image
-                cachePolicy={"none"}
-                source={{ uri: previewImage }}
-                style={styles.previewImage}
-                contentFit="cover"
-              />
-            )}
+
+            {/* JOB TITLE */}
             <TextInput
-              style={styles.descriptionInput}
-              placeholder="Add a description (optional)"
+              style={styles.formInput}
+              placeholder="Job title"
+              placeholderTextColor="#999"
+              value={title}
+              onChangeText={setTitle}
+            />
+
+            {/* DESCRIPTION */}
+            <TextInput
+              style={[
+                styles.formInput,
+                styles.descriptionInput,
+              ]}
+              placeholder={`Describe what needs to be done...
+        Eg: Take my dog for a walk...
+        Help me clean my garage`}
+
+
               placeholderTextColor="#999"
               value={description}
               onChangeText={setDescription}
@@ -324,32 +541,207 @@ export default function Index() {
               maxLength={500}
               textAlignVertical="top"
             />
-            <View style={styles.modalButtons}>
+
+            {/* TASK TYPE */}
+
+            <View style={styles.taskTypeContainer}>
+
               <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
+                style={[
+                  styles.taskTypeButton,
+                  taskType === "single" &&
+                  styles.taskTypeButtonActive,
+                ]}
+                onPress={() => setTaskType("single")}
+              >
+                <Text
+                  style={[
+                    styles.taskTypeText,
+                    taskType === "single" &&
+                    styles.taskTypeTextActive,
+                  ]}
+                >
+                  Single task
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.taskTypeButton,
+                  taskType === "multiple" &&
+                  styles.taskTypeButtonActive,
+                ]}
+                onPress={() => setTaskType("multiple")}
+              >
+                <Text
+                  style={[
+                    styles.taskTypeText,
+                    taskType === "multiple" &&
+                    styles.taskTypeTextActive,
+                  ]}
+                >
+                  Multiple tasks
+                </Text>
+              </TouchableOpacity>
+
+            </View>
+
+            {/* BUDGET */}
+            <TextInput
+              style={styles.formInput}
+              placeholder="Budget (₹)"
+              placeholderTextColor="#999"
+              value={budget}
+              onChangeText={setBudget}
+              keyboardType="numeric"
+            />
+
+            {/* NEGOTIABLE */}
+            <TouchableOpacity
+              style={styles.negotiableRow}
+              onPress={() =>
+                setIsNegotiable(!isNegotiable)
+              }
+            >
+              <Ionicons
+                name={
+                  isNegotiable
+                    ? "checkbox"
+                    : "square-outline"
+                }
+                size={24}
+                color="#6C63FF"
+              />
+
+              <Text style={styles.negotiableLabel}>
+                Budget is negotiable
+              </Text>
+            </TouchableOpacity>
+
+            {/* DURATION */}
+            <TextInput
+              style={styles.formInput}
+              placeholder="Estimated duration (hours)"
+              placeholderTextColor="#999"
+              value={durationHours}
+              onChangeText={setDurationHours}
+              keyboardType="decimal-pad"
+            />
+
+            {/* REQUIREMENTS */}
+            <TextInput
+              style={[
+                styles.formInput,
+                styles.smallTextArea,
+              ]}
+              placeholder={`Requirements (optional)
+        Eg: Must have a 2 wheeler
+        Must have equipments`}
+              placeholderTextColor="#999"
+              value={requirements}
+              onChangeText={setRequirements}
+              multiline
+              textAlignVertical="top"
+            />
+
+            {/* LOCATION */}
+            <TextInput
+              style={styles.formInput}
+              placeholder="Location (optional)"
+              placeholderTextColor="#999"
+              value={location}
+              onChangeText={setLocation}
+            />
+
+            {/* PHOTO */}
+            {previewImage ? (
+              <View>
+                <Image
+                  cachePolicy="none"
+                  source={{
+                    uri: previewImage,
+                  }}
+                  style={styles.previewImage}
+                  contentFit="cover"
+                />
+
+                <TouchableOpacity
+                  style={styles.changePhotoButton}
+                  onPress={showImagePicker}
+                >
+                  <Text style={styles.changePhotoText}>
+                    Change Photo
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.addPhotoButton}
+                onPress={showImagePicker}
+              >
+                <Ionicons
+                  name="image-outline"
+                  size={24}
+                  color="#6C63FF"
+                />
+
+                <Text style={styles.addPhotoText}>
+                  Add Photo (Optional)
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* BUTTONS */}
+            <View style={styles.modalButtons}>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.cancelButton,
+                ]}
                 onPress={() => {
                   setShowPreview(false);
                   setPreviewImage(null);
+                  setTitle("");
                   setDescription("");
+                  setTaskType("single");
+                  setBudget("");
+                  setIsNegotiable(true);
+                  setDurationHours("");
+                  setRequirements("");
+                  setLocation("");
                 }}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>
+                  Cancel
+                </Text>
               </TouchableOpacity>
+
               <TouchableOpacity
-                style={[styles.modalButton, styles.postButton]}
+                style={[
+                  styles.modalButton,
+                  styles.postButton,
+                ]}
                 onPress={handlePost}
                 disabled={isUploading}
               >
                 {isUploading ? (
-                  <ActivityIndicator size={24} color="#fff" />
+                  <ActivityIndicator
+                    size={24}
+                    color="#fff"
+                  />
                 ) : (
                   <Text style={styles.postButtonText}>
-                    {hasActivePost ? "Replace" : "Post"}
+                    {hasActivePost
+                      ? "Replace"
+                      : "Post Job"}
                   </Text>
                 )}
               </TouchableOpacity>
+
             </View>
-          </View>
+
+          </ScrollView>
         </View>
       </Modal>
     </SafeAreaView>
@@ -377,6 +769,114 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  formInput: {
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    backgroundColor: "#f8f8fa",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    marginBottom: 12,
+    color: "#222",
+  },
+
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+
+  taskTypeContainer: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+
+  taskTypeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+
+  taskTypeButtonActive: {
+    backgroundColor: "#6C63FF",
+    borderColor: "#6C63FF",
+  },
+
+  taskTypeText: {
+    fontSize: 14,
+    color: "#555",
+    fontWeight: "500",
+  },
+
+  taskTypeTextActive: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+
+  negotiableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+
+  negotiableLabel: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#333",
+  },
+
+  smallTextArea: {
+    minHeight: 70,
+  },
+
+  addPhotoButton: {
+    height: 90,
+    borderWidth: 1.5,
+    borderColor: "#d8d8e0",
+    borderStyle: "dashed",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fafaff",
+    marginBottom: 14,
+  },
+
+  addPhotoText: {
+    marginTop: 7,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6C63FF",
+  },
+
+  changePhotoButton: {
+    alignSelf: "center",
+    marginTop: 8,
+    marginBottom: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: "#f0efff",
+  },
+
+  changePhotoText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6C63FF",
+  },
+
+  noImageContainer: {
+    height: 180,
+    backgroundColor: "#f5f5f7",
+    alignItems: "center",
+    justifyContent: "center",
   },
   fabText: {
     color: "#fff",
@@ -435,6 +935,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     backgroundColor: "#f5f5f5",
+    marginBottom: 20
   },
   cancelButtonText: {
     color: "#000",
@@ -443,6 +944,7 @@ const styles = StyleSheet.create({
   },
   postButton: {
     backgroundColor: "#000",
+    marginBottom: 20
   },
   postButtonText: {
     color: "#fff",
@@ -507,52 +1009,52 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
   },
-    bell:{
-    position:"relative",
-    color:"#fff",
-    padding:1,
-    marginLeft:40,
+  bell: {
+    position: "relative",
+    color: "#fff",
+    padding: 1,
+    marginLeft: 40,
     alignItems: "center",
     justifyContent: "center",
   },
-  bellIcon:{
-    color:"#333"
+  bellIcon: {
+    color: "#333"
   },
-  notificationBadge:{
-  position: "absolute",
-  top: -2,
-  right: -2,
-  backgroundColor: "red",
-  minWidth: 18,
-  height: 18,
-  borderRadius: 9,
-  alignItems: "center",
-  justifyContent: "center",
-  paddingHorizontal: 4,
+  notificationBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    backgroundColor: "red",
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
   },
-  notificationBadgeText:{
-     color: "white",
-  fontSize: 11,
-  fontWeight: "bold",
+  notificationBadgeText: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "bold",
   },
   timeRemainingBadge: {
     backgroundColor: "#fff",
   },
-    timeRemainingText: {
+  timeRemainingText: {
     color: "#000",
     fontSize: 12,
     fontWeight: "600",
   },
-  SendRequestButton:{
-    display:"flex",
-    backgroundColor:"#000",
-    borderRadius:12,
-    padding:10,
-    marginTop:5
+  SendRequestButton: {
+    display: "flex",
+    backgroundColor: "#000",
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 5
   },
-  SendRequestText:{
-    color:"#fff",
-    textAlign:"center"
+  SendRequestText: {
+    color: "#fff",
+    textAlign: "center"
   },
   postImage: {
     width: "100%",
@@ -571,5 +1073,58 @@ const styles = StyleSheet.create({
   postInfo: {
     fontSize: 14,
     color: "#666",
+  },
+  jobTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111",
+    marginBottom: 8,
+  },
+
+  jobDetails: {
+    gap: 9,
+    marginBottom: 14,
+  },
+
+  detailItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  detailText: {
+    marginLeft: 7,
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "500",
+  },
+
+  negotiable: {
+    marginLeft: 8,
+    color: "#6C63FF",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  requirementsContainer: {
+    marginTop: 4,
+    marginBottom: 14,
+    padding: 12,
+    backgroundColor: "#f7f7f9",
+    borderRadius: 10,
+  },
+
+  requirementsTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 5,
+  },
+
+  requirementsText: {
+    fontSize: 14,
+    color: "#555",
+    lineHeight: 20,
+  },
+  modalScrollContent: {
+    paddingBottom: 20,
   },
 });

@@ -9,12 +9,32 @@ export interface PostUser {
   username: string;
   profile_image_url?: string;
 }
-
+interface CreatePostData {
+  imageUri?: string;
+  title: string;
+  description: string;
+  taskType: "single" | "multiple";
+  budget: number;
+  isNegotiable: boolean;
+  durationHours?: number;
+  requirements?: string;
+  location?: string;
+}
 export interface Post {
   id: string;
   user_id: string;
-  image_url: string;
-  description?: string;
+  task_type: "single" | "multiple";
+
+  budget?: number | null;
+  is_negotiable: boolean;
+
+  duration_hours?: number | null;
+
+  requirements?: string | null;
+  location?: string | null;
+  image_url?: string | null;
+  title: string;
+  description?: string | null;
   created_at: string;
   expires_at: string;
   is_active: boolean;
@@ -28,7 +48,18 @@ export interface ReceivedRequest {
   post_id: string;
   status: string;
   created_at: string;
-  sender: PostUser | null;
+
+  sender?: {
+    id: string;
+    name: string;
+    username: string;
+    profile_image_url?: string;
+  } | null;
+
+  post?: {
+    id: string;
+    title: string;
+  } | null;
 }
 
 export interface AcceptedRequest {
@@ -118,7 +149,17 @@ export const usePosts = () => {
 
 
 
-  const createPost = async (imageUri: string, description?: string) => {
+  const createPost = async ({
+    imageUri,
+    title,
+    description,
+    taskType,
+    budget,
+    isNegotiable,
+    durationHours,
+    requirements,
+    location,
+  }: CreatePostData) => {
     if (!user) {
       throw new Error("User not authenticated");
     }
@@ -135,7 +176,14 @@ export const usePosts = () => {
         console.error("Error deactivating old posts:", deactivateError);
       }
 
-      const imageUrl = await uploadPostImage(user.id, imageUri);
+      let imageUrl: string | null = null;
+
+      if (imageUri) {
+        imageUrl = await uploadPostImage(
+          user.id,
+          imageUri
+        );
+      }
 
       // Calculate expiration time
       const now = new Date();
@@ -146,7 +194,20 @@ export const usePosts = () => {
         .insert({
           user_id: user.id,
           image_url: imageUrl,
-          description: description || null,
+
+          title: title.trim(),
+          description: description.trim(),
+
+          task_type: taskType,
+
+          budget,
+          is_negotiable: isNegotiable,
+
+          duration_hours: durationHours ?? null,
+
+          requirements: requirements?.trim() || null,
+          location: location?.trim() || null,
+
           expires_at: expiresAt.toISOString(),
           is_active: true,
         })
@@ -285,12 +346,13 @@ export const usePosts = () => {
 
     try {
       // Get pending requests
-      const { data: requestsData, error: requestsError } = await supabase
-        .from("requests")
-        .select("*")
-        .eq("receiver_id", user.id)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
+      const { data: requestsData, error: requestsError } =
+        await supabase
+          .from("requests")
+          .select("*")
+          .eq("receiver_id", user.id)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false });
 
       if (requestsError) {
         console.error("Error getting requests:", requestsError);
@@ -306,7 +368,12 @@ export const usePosts = () => {
         (request) => request.sender_id
       );
 
-      // Get their profiles
+      // Get all post IDs
+      const postIds = requestsData.map(
+        (request) => request.post_id
+      );
+
+      // Get sender profiles
       const { data: profilesData, error: profilesError } =
         await supabase
           .from("profiles")
@@ -323,7 +390,22 @@ export const usePosts = () => {
         return [];
       }
 
-      // Combine request + sender profile
+      // Get job posts
+      const { data: postsData, error: postsError } =
+        await supabase
+          .from("posts")
+          .select("id, title")
+          .in("id", postIds);
+
+      if (postsError) {
+        console.error(
+          "Error getting posts:",
+          postsError
+        );
+        return [];
+      }
+
+      // Combine request + sender profile + post
       const requestsWithProfiles: ReceivedRequest[] =
         requestsData.map((request) => ({
           id: request.id,
@@ -337,6 +419,12 @@ export const usePosts = () => {
             profilesData?.find(
               (profile) =>
                 profile.id === request.sender_id
+            ) ?? null,
+
+          post:
+            postsData?.find(
+              (post) =>
+                post.id === request.post_id
             ) ?? null,
         }));
 

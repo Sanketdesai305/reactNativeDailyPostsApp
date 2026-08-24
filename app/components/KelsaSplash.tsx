@@ -6,13 +6,13 @@ import {
   View,
 } from "react-native";
 
-interface NextJobSplashProps {
+interface KelsaSplashProps {
   onFinish?: () => void;
 }
 
-export default function NextJobSplash({
+export default function KelsaSplash({
   onFinish,
-}: NextJobSplashProps) {
+}: KelsaSplashProps) {
   const logoOpacity = useRef(
     new Animated.Value(0)
   ).current;
@@ -40,7 +40,7 @@ export default function NextJobSplash({
   useEffect(() => {
     Animated.sequence([
       // -------------------------
-      // NEXTJOB APPEARS
+      // KELSA APPEARS
       // -------------------------
       Animated.parallel([
         Animated.timing(logoOpacity, {
@@ -128,7 +128,7 @@ export default function NextJobSplash({
         {/* LOGO */}
 
         <Text style={styles.logo}>
-          NextJob
+          Kelsa
         </Text>
 
         {/* TAGLINE */}
