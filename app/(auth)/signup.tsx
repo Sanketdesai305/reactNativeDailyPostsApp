@@ -310,6 +310,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginBottom: 10,
     fontSize: 16,
+     color: "#111",
   },
 
   signupButton: {

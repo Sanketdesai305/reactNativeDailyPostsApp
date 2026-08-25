@@ -16,17 +16,14 @@
       }
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
+      "icon": "./assets/images/icon.png",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES"
-      ]
+      ],
+      "package": "com.sanketdesai92.kelsa"
     },
     "web": {
       "output": "static",
@@ -51,6 +48,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ced0b69f-03f6-404e-be2f-ca5719022f36"
+      }
     }
   }
 }

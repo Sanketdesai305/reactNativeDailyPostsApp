@@ -5,7 +5,7 @@ import { Stack, useRouter } from "expo-router";
 import React, { useEffect } from 'react';
 
 export default function AuthLayout() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isAuthProcessing } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -15,11 +15,14 @@ export default function AuthLayout() {
     }
   }, [user, isLoading, router]);
 
+  if (isAuthProcessing) {
+    return null;
+  }
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="login" />
       <Stack.Screen name="signup" />
-      <Stack.Screen name="onboarding" />
     </Stack>
   );
 }

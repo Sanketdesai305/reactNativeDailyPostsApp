@@ -7,10 +7,16 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import KelsaSplash from "./components/KelsaSplash";
+
 export default function RootLayout() {
   function RouteGuard() {
     const router = useRouter();
-    const { user, isLoading } = useAuth();
+    const {
+      user,
+      isLoading,
+      isPasswordRecovery,
+      isAuthProcessing,
+    } = useAuth();
     const segments = useSegments();
     const [showOverlay, setShowOverlay] = useState(true);
 
@@ -22,8 +28,9 @@ export default function RootLayout() {
     const inChat = segments[0] === "chat";
     const inHelpSupport = segments[0] === "help-support";
     const inPrivacyPolicy = segments[0] === "privacy-policy";
+    const inResetPassword = segments[0] === "reset-password";
     useEffect(() => {
-      if (isLoading) {
+      if (isLoading || isAuthProcessing) {
         setShowOverlay(true);
         return;
       }
@@ -31,12 +38,21 @@ export default function RootLayout() {
       // ensure overlay stays visible at least until loading finishes
       setShowOverlay(false);
 
-      if (!user && !inAuthGroup) {
+      if (isPasswordRecovery && !inResetPassword) {
+        router.replace("/reset-password");
+      } else if (
+        !user &&
+        !inAuthGroup &&
+        !inResetPassword &&
+        !isPasswordRecovery &&
+        !isAuthProcessing
+      ) {
         router.replace("/(auth)/login");
-      } else if (user && !inTabsGroup && !inNotifications && !inOnboarding && !inDetails && !inChat && !inHelpSupport && !inPrivacyPolicy) {
+
+      } else if (user && !inTabsGroup && !inResetPassword && !inNotifications && !inOnboarding && !inDetails && !inChat && !inHelpSupport && !inPrivacyPolicy) {
         router.replace("/(tabs)");
       }
-    }, [user, isLoading, inAuthGroup, inTabsGroup, inNotifications, inOnboarding, inDetails, router, inChat, inHelpSupport, inPrivacyPolicy]);
+    }, [user, isLoading, isAuthProcessing, inAuthGroup, isPasswordRecovery, inResetPassword, inTabsGroup, inNotifications, inOnboarding, inDetails, router, inChat, inHelpSupport, inPrivacyPolicy]);
 
     return (
       <>
@@ -54,6 +70,7 @@ export default function RootLayout() {
               animation: "slide_from_right",
             }}
           />
+          <Stack.Screen name="reset-password" />
         </Stack>
         {showOverlay && (
           <View style={styles.overlay} pointerEvents="auto">
@@ -65,13 +82,13 @@ export default function RootLayout() {
   }
 
   return (
-<AuthProvider>
-  <SearchProvider>
-    <RequestProvider>
-      <RouteGuard />
-    </RequestProvider>
-  </SearchProvider>
-</AuthProvider>
+    <AuthProvider>
+      <SearchProvider>
+        <RequestProvider>
+          <RouteGuard />
+        </RequestProvider>
+      </SearchProvider>
+    </AuthProvider>
   );
 }
 

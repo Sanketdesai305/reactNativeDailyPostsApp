@@ -172,6 +172,7 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             style={styles.input}
+            
           />
 
           {/* Forgot password */}
@@ -313,6 +314,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#e0e0e0",
+     color: "#111",
   },
   forgotPassword: {
     alignSelf: "flex-end",
