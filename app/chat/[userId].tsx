@@ -5,14 +5,14 @@ import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -24,6 +24,12 @@ interface Message {
   content: string;
   created_at: string;
 }
+interface ChatUser {
+  id: string;
+  name: string | null;
+  username: string | null;
+  profile_image_url: string | null;
+}
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -34,7 +40,7 @@ export default function ChatScreen() {
     postId: string;
   }>();
 
-  const [otherUser, setOtherUser] = useState<any>(null);
+  const [otherUser, setOtherUser] = useState<ChatUser | null>(null);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -293,21 +299,32 @@ const sendMessage = async () => {
             />
           </TouchableOpacity>
 
-          {otherUser?.profile_image_url ? (
-            <Image
-              source={{
-                uri: otherUser.profile_image_url,
-              }}
-              style={styles.headerImage}
-            />
-          ) : (
-            <View style={styles.headerPlaceholder}>
-              <Text style={styles.headerInitial}>
-                {otherUser?.name?.[0]?.toUpperCase() ||
-                  "U"}
-              </Text>
-            </View>
-          )}
+          <TouchableOpacity
+            onPress={() => {
+              if (userId) {
+                router.push({
+                  pathname: "/details",
+                  params: { userId },
+                });
+              }
+            }}
+          >
+            {otherUser?.profile_image_url ? (
+              <Image
+                source={{
+                  uri: otherUser.profile_image_url,
+                }}
+                style={styles.headerImage}
+              />
+            ) : (
+              <View style={styles.headerPlaceholder}>
+                <Text style={styles.headerInitial}>
+                  {otherUser?.name?.[0]?.toUpperCase() ||
+                    "U"}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
           <Text style={styles.headerName}>
             {otherUser?.name || "User"}

@@ -13,12 +13,13 @@ import {
   Alert,
   FlatList,
   Modal,
-  RefreshControl, ScrollView, StyleSheet,
+  RefreshControl, ScrollView, Share, StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View
 } from "react-native";
+import RazorpayCheckout from "react-native-razorpay";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Post, usePosts } from "../hooks/usePosts";
 interface PostCardProps {
@@ -27,8 +28,10 @@ interface PostCardProps {
   sendRequest: (receiverId: string, postId: string) => Promise<boolean>;
 }
 
-const PostCard = ({ post, currentUserId,  sendRequest }: PostCardProps) => {
-  const [requestSent, setRequestSent] = useState(false);
+const PostCard = ({ post, currentUserId, sendRequest }: PostCardProps) => {
+  const [requestStatus, setRequestStatus] = useState<
+    "none" | "pending" | "accepted" | "rejected"
+  >("none");
   const postUser = post.profiles;
   const isOwnPost = post.user_id === currentUserId;
   const router = useRouter();
@@ -41,10 +44,10 @@ const PostCard = ({ post, currentUserId,  sendRequest }: PostCardProps) => {
 
       const { data, error } = await supabase
         .from("requests")
-        .select("id")
+        .select("status")
         .eq("post_id", post.id)
         .eq("sender_id", currentUserId)
-        .eq("status", "pending")
+        .in("status", ["pending", "accepted", "rejected"])
         .maybeSingle();
 
       if (error) {
@@ -52,7 +55,7 @@ const PostCard = ({ post, currentUserId,  sendRequest }: PostCardProps) => {
         return;
       }
 
-      setRequestSent(!!data);
+      setRequestStatus(data?.status ?? "none");
     };
 
     checkRequestStatus();
@@ -62,7 +65,18 @@ const PostCard = ({ post, currentUserId,  sendRequest }: PostCardProps) => {
     const success = await sendRequest(post.user_id, post.id);
 
     if (success) {
-      setRequestSent(true);
+      setRequestStatus("pending");
+    }
+  };
+  const handleShareJob = async (post: Post) => {
+    try {
+      const jobUrl = `https://kelsa.app/job/${post.id}`;
+
+      await Share.share({
+        message: `🔧 ${post.description}\n\n💰 ₹${post.budget}\n\nView and apply:\n${jobUrl}`,
+      });
+    } catch (error) {
+      console.error("Error sharing job:", error);
     }
   };
   return (
@@ -130,9 +144,15 @@ const PostCard = ({ post, currentUserId,  sendRequest }: PostCardProps) => {
       <View style={styles.postFooter}>
 
         {/* JOB TITLE */}
-        <Text style={styles.jobTitle}>
-          {post.title}
-        </Text>
+        <View style={styles.share}>
+          <Text style={styles.jobTitle} >
+            {post.title}
+          </Text>
+
+          <TouchableOpacity onPress={() => handleShareJob(post)}>
+            <Ionicons name="share-social-outline" size={24} color="#333" />
+          </TouchableOpacity>
+        </View>
 
         {/* DESCRIPTION */}
         {post.description && (
@@ -248,10 +268,16 @@ const PostCard = ({ post, currentUserId,  sendRequest }: PostCardProps) => {
         {!isOwnPost && (
           <TouchableOpacity
             onPress={sendRequestFunc}
+            disabled={
+              requestStatus === "pending" ||
+              requestStatus === "accepted"
+            }
             style={styles.SendRequestButton}
           >
             <Text style={styles.SendRequestText}>
-              {requestSent ? "Sent" : "Send Request"}
+              {requestStatus === "pending" || requestStatus === "accepted"
+                ? "Sent"
+                : "Send Request"}
             </Text>
           </TouchableOpacity>
         )}
@@ -282,6 +308,7 @@ export default function Index() {
     posts,
     refreshPosts,
     sendRequest,
+    createPaymentOrder,
   } = usePosts();
   const { user } = useAuth();
   const {
@@ -435,7 +462,43 @@ export default function Index() {
     setIsUploading(true);
 
     try {
-      await createPost({
+      // ------------------------------------------
+      // 1. CREATE RAZORPAY ORDER
+      // ------------------------------------------
+
+      const payment = await createPaymentOrder(
+        budgetNumber
+      );
+
+      // ------------------------------------------
+      // 2. OPEN RAZORPAY CHECKOUT
+      // ------------------------------------------
+
+      const razorpayResult =
+        await RazorpayCheckout.open({
+          key: payment.keyId,
+
+          amount: payment.amount,
+
+          currency: payment.currency,
+
+          name: "Kelsa",
+
+          description: title.trim(),
+
+          order_id: payment.orderId,
+
+          theme: {
+            color: "#6C63FF",
+          },
+        });
+
+
+
+      // ------------------------------------------
+      // 4. PAYMENT SUCCESSFUL
+      // ------------------------------------------
+      const newPost = await createPost({
         imageUri: previewImage ?? undefined,
         title: title.trim(),
         description: description.trim(),
@@ -446,6 +509,35 @@ export default function Index() {
         requirements: requirements.trim() || undefined,
         location: location.trim() || undefined,
       });
+      console.log("NEW POST CREATED:", newPost);
+      const { data: paymentData, error: paymentError } =
+        await supabase.functions.invoke("complete-payment", {
+          body: {
+            postId: newPost.id,
+            amount: budgetNumber,
+            platformFee: payment.platformFee,
+            workerAmount: payment.workerAmount,
+            razorpayOrderId:
+              razorpayResult.razorpay_order_id,
+            razorpayPaymentId:
+              razorpayResult.razorpay_payment_id,
+          },
+        });
+
+      if (paymentError || !paymentData?.success) {
+        console.error("Complete payment error:", {
+          paymentError,
+          paymentData,
+        });
+
+        throw new Error(
+          paymentError?.message ||
+          paymentData?.error ||
+          "Failed to record payment"
+        );
+      }
+
+      await refreshPosts();
 
       setPreviewImage(null);
       setTitle("");
@@ -458,11 +550,12 @@ export default function Index() {
       setLocation("");
       setShowPreview(false);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating post:", error);
 
       Alert.alert(
         "Error",
+        error?.message ||
         "Failed to create post. Please try again."
       );
     } finally {
@@ -529,9 +622,9 @@ export default function Index() {
                 styles.formInput,
                 styles.descriptionInput,
               ]}
-              placeholder={`Describe what needs to be done...
-        Eg: Take my dog for a walk...
-        Help me clean my garage`}
+              placeholder={`Need a quick local delivery...
+        Need someone to take my dog for a walk...
+        Need someone to help me clean my garage`}
 
 
               placeholderTextColor="#999"
@@ -769,6 +862,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  share: {
+    display: "flex",
+    flexDirection: "row",
+    justifyContent: "space-between"
   },
   formInput: {
     borderWidth: 1,

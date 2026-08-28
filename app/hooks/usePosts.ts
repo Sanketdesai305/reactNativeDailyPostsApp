@@ -98,12 +98,16 @@ export const usePosts = () => {
     const { error } = await supabase
       .from("posts")
       .delete()
-      .or(
-        `is_active.eq.false,expires_at.lte.${new Date().toISOString()}`
+      .lte(
+        "expires_at",
+        new Date().toISOString()
       );
 
     if (error) {
-      console.error("Error deleting expired posts:", error);
+      console.error(
+        "Error deleting expired posts:",
+        error
+      );
     }
   };
 
@@ -189,7 +193,7 @@ export const usePosts = () => {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-      const { error } = await supabase
+      const { data: newPost, error } = await supabase
         .from("posts")
         .insert({
           user_id: user.id,
@@ -209,7 +213,7 @@ export const usePosts = () => {
           location: location?.trim() || null,
 
           expires_at: expiresAt.toISOString(),
-          is_active: true,
+          is_active: false,
         })
         .select()
         .single();
@@ -221,6 +225,7 @@ export const usePosts = () => {
 
       // Refresh posts
       await loadPosts();
+      return newPost;
     } catch (error) {
       console.error("Error in createPost:", error);
       throw error;
@@ -243,7 +248,31 @@ export const usePosts = () => {
     }
 
     try {
-      const { error } = await supabase
+      const { data: existingRequest, error: lookupError } = await supabase
+        .from("requests")
+        .select("id, status")
+        .eq("post_id", postId)
+        .eq("sender_id", user.id)
+        .in("status", ["pending", "accepted", "rejected"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lookupError) {
+        console.error("Error checking existing request:", lookupError);
+        return false;
+      }
+
+      if (existingRequest?.status === "accepted") {
+        return false;
+      }
+
+      const { error } = existingRequest
+        ? await supabase
+          .from("requests")
+          .update({ status: "pending" })
+          .eq("id", existingRequest.id)
+        : await supabase
         .from("requests")
         .insert({
           sender_id: user.id,
@@ -296,19 +325,52 @@ export const usePosts = () => {
     }
 
     try {
-      const { error } = await supabase
+      // 1. Get the request so we know which post it belongs to
+      const { data: request, error: requestError } = await supabase
         .from("requests")
-        .update({ status: "accepted" })
+        .select("post_id")
+        .eq("id", requestId)
+        .eq("receiver_id", user.id)
+        .eq("status", "pending")
+        .single();
+
+      if (requestError || !request) {
+        console.error("Error getting request:", requestError);
+        return false;
+      }
+
+      // 2. Accept the request
+      const { error: acceptError } = await supabase
+        .from("requests")
+        .update({
+          status: "accepted",
+          accepted_at: new Date().toISOString(),
+        })
         .eq("id", requestId)
         .eq("receiver_id", user.id)
         .eq("status", "pending");
 
-      if (error) {
-        console.error("Error accepting request:", error);
+      if (acceptError) {
+        console.error("Error accepting request:", acceptError);
         return false;
       }
 
+      // 3. Mark the accepted request as ready for chat
+      const { error: postError } = await supabase
+        .from("posts")
+        .update({
+          status: "in_progress",
+        })
+        .eq("id", request.post_id);
+
+      if (postError) {
+        console.error("Error updating post status:", postError);
+        return false;
+      }
+
+      // 4. Remove the request from notification count
       setRequestCount((count) => Math.max(0, count - 1));
+
       return true;
     } catch (error) {
       console.error("Error in acceptRequest:", error);
@@ -341,172 +403,193 @@ export const usePosts = () => {
     }
   };
 
-  const getReceivedRequests = async (): Promise<ReceivedRequest[]> => {
-    if (!user) return [];
+const getReceivedRequests = async (): Promise<ReceivedRequest[]> => {
+  if (!user) return [];
 
-    try {
-      // Get pending requests
-      const { data: requestsData, error: requestsError } =
-        await supabase
-          .from("requests")
-          .select("*")
-          .eq("receiver_id", user.id)
-          .eq("status", "pending")
-          .order("created_at", { ascending: false });
+  try {
+    // Get pending requests
+    const { data: requestsData, error: requestsError } =
+      await supabase
+        .from("requests")
+        .select("*")
+        .eq("receiver_id", user.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
 
-      if (requestsError) {
-        console.error("Error getting requests:", requestsError);
-        return [];
-      }
-
-      if (!requestsData || requestsData.length === 0) {
-        return [];
-      }
-
-      // Get all sender IDs
-      const senderIds = requestsData.map(
-        (request) => request.sender_id
-      );
-
-      // Get all post IDs
-      const postIds = requestsData.map(
-        (request) => request.post_id
-      );
-
-      // Get sender profiles
-      const { data: profilesData, error: profilesError } =
-        await supabase
-          .from("profiles")
-          .select(
-            "id, name, username, profile_image_url"
-          )
-          .in("id", senderIds);
-
-      if (profilesError) {
-        console.error(
-          "Error getting sender profiles:",
-          profilesError
-        );
-        return [];
-      }
-
-      // Get job posts
-      const { data: postsData, error: postsError } =
-        await supabase
-          .from("posts")
-          .select("id, title")
-          .in("id", postIds);
-
-      if (postsError) {
-        console.error(
-          "Error getting posts:",
-          postsError
-        );
-        return [];
-      }
-
-      // Combine request + sender profile + post
-      const requestsWithProfiles: ReceivedRequest[] =
-        requestsData.map((request) => ({
-          id: request.id,
-          sender_id: request.sender_id,
-          receiver_id: request.receiver_id,
-          post_id: request.post_id,
-          status: request.status,
-          created_at: request.created_at,
-
-          sender:
-            profilesData?.find(
-              (profile) =>
-                profile.id === request.sender_id
-            ) ?? null,
-
-          post:
-            postsData?.find(
-              (post) =>
-                post.id === request.post_id
-            ) ?? null,
-        }));
-
-      return requestsWithProfiles;
-
-    } catch (error) {
-      console.error(
-        "Error in getReceivedRequests:",
-        error
-      );
-
+    if (requestsError) {
+      console.error("Error getting requests:", requestsError);
       return [];
     }
-  };
 
-  const getAcceptedRequests = async (): Promise<AcceptedRequest[]> => {
-    if (!user) return [];
+    if (!requestsData || requestsData.length === 0) {
+      return [];
+    }
 
-    try {
-      // 1. Get accepted requests involving the current user
-      const { data: requests, error: requestError } = await supabase
+    // Get all sender IDs
+    const senderIds = requestsData.map(
+      (request) => request.sender_id
+    );
+
+    // Get all post IDs
+    const postIds = requestsData.map(
+      (request) => request.post_id
+    );
+
+    // Get sender profiles using profiles.user_id
+    const { data: profilesData, error: profilesError } =
+      await supabase
+        .from("profiles")
+        .select(
+          "user_id, name, username, profile_image_url"
+        )
+        .in("user_id", senderIds);
+
+    if (profilesError) {
+      console.error(
+        "Error getting sender profiles:",
+        profilesError
+      );
+      return [];
+    }
+
+    // Get job posts
+    const { data: postsData, error: postsError } =
+      await supabase
+        .from("posts")
+        .select("id, title")
+        .in("id", postIds);
+
+    if (postsError) {
+      console.error(
+        "Error getting posts:",
+        postsError
+      );
+      return [];
+    }
+
+    // Combine request + sender profile + post
+const requestsWithProfiles: ReceivedRequest[] =
+  requestsData.map((request) => {
+    const profile = profilesData?.find(
+      (profile) =>
+        profile.user_id === request.sender_id
+    );
+
+    const post = postsData?.find(
+      (post) =>
+        post.id === request.post_id
+    );
+
+    return {
+      id: request.id,
+      sender_id: request.sender_id,
+      receiver_id: request.receiver_id,
+      post_id: request.post_id,
+      status: request.status,
+      created_at: request.created_at,
+
+      sender: profile
+        ? {
+            id: profile.user_id,
+            name: profile.name,
+            username: profile.username,
+            profile_image_url:
+              profile.profile_image_url,
+          }
+        : null,
+
+      post: post ?? null,
+    };
+  });
+
+    return requestsWithProfiles;
+
+  } catch (error) {
+    console.error(
+      "Error in getReceivedRequests:",
+      error
+    );
+
+    return [];
+  }
+};
+
+const getAcceptedRequests = async (): Promise<AcceptedRequest[]> => {
+  if (!user) return [];
+
+  try {
+    // 1. Get accepted requests involving the current user
+    const { data: requestsData, error: requestsError } =
+      await supabase
         .from("requests")
         .select(`
-        id,
-        sender_id,
-        receiver_id,
-        post_id,
-        status,
-        created_at
-      `)
+          id,
+          sender_id,
+          receiver_id,
+          post_id,
+          status,
+          created_at
+        `)
         .eq("status", "accepted")
         .or(
           `sender_id.eq.${user.id},receiver_id.eq.${user.id}`
-        );
+        )
+        .order("created_at", { ascending: false });
 
-      if (requestError) {
-        console.error(
-          "Error getting accepted requests:",
-          requestError
-        );
-        return [];
-      }
-
-      if (!requests || requests.length === 0) {
-        return [];
-      }
-
-      // 2. Determine the other user's ID for each request
-      const otherUserIds = requests.map((request) =>
-        request.sender_id === user.id
-          ? request.receiver_id
-          : request.sender_id
+    if (requestsError) {
+      console.error(
+        "Error getting accepted requests:",
+        requestsError
       );
+      return [];
+    }
 
-      // 3. Get their profiles
-      const { data: profiles, error: profileError } = await supabase
-        .from("profiles")
-        .select(`
-        id,
-        name,
-        username,
-        profile_image_url
-      `)
-        .in("id", otherUserIds);
+    if (!requestsData || requestsData.length === 0) {
+      return [];
+    }
 
-      if (profileError) {
-        console.error(
-          "Error getting profiles:",
-          profileError
-        );
-        return [];
-      }
+    // 2. Get the ID of the other user for each request
+    const otherUserIds = requestsData.map((request) =>
+      request.sender_id === user.id
+        ? request.receiver_id
+        : request.sender_id
+    );
 
-      // 4. Attach the correct profile to each request
-      return requests.map((request) => {
+    // Remove duplicates
+    const uniqueUserIds = [
+      ...new Set(otherUserIds),
+    ];
+
+    // 3. Get profiles using the auth UUID stored in profiles.id
+    const {
+      data: profilesData,
+      error: profilesError,
+    } = await supabase
+      .from("profiles")
+      .select(
+        "id, name, username, profile_image_url"
+      )
+      .in("id", uniqueUserIds);
+
+    if (profilesError) {
+      console.error(
+        "Error getting accepted request profiles:",
+        profilesError
+      );
+      return [];
+    }
+
+    // 4. Attach the OTHER user's profile
+    const requestsWithProfiles: AcceptedRequest[] =
+      requestsData.map((request) => {
         const otherUserId =
           request.sender_id === user.id
             ? request.receiver_id
             : request.sender_id;
 
-        const otherUser = profiles?.find(
-          (profile) => profile.id === otherUserId
+        const profile = profilesData?.find(
+          (profile) =>
+            profile.id === otherUserId
         );
 
         return {
@@ -516,16 +599,60 @@ export const usePosts = () => {
           post_id: request.post_id,
           status: request.status,
           created_at: request.created_at,
-          otherUser: otherUser ?? null,
+
+          otherUser: profile
+            ? {
+                id: profile.id,
+                name: profile.name,
+                username: profile.username,
+                profile_image_url:
+                  profile.profile_image_url,
+              }
+            : null,
         };
       });
-    } catch (error) {
-      console.error(
-        "Error in getAcceptedRequests:",
-        error
+
+    return requestsWithProfiles;
+  } catch (error) {
+    console.error(
+      "Error in getAcceptedRequests:",
+      error
+    );
+
+    return [];
+  }
+};
+  // CREATE RAZORPAY PAYMENT ORDER
+  const createPaymentOrder = async (amount: number) => {
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "create-payment-order",
+        {
+          body: {
+            amount,
+          },
+        }
       );
 
-      return [];
+      if (error) {
+        console.error("Error creating payment order:", error);
+        throw error;
+      }
+
+      if (!data?.success) {
+        throw new Error(
+          data?.error || "Unable to create payment order"
+        );
+      }
+
+      return data;
+    } catch (error) {
+      console.error("Error in createPaymentOrder:", error);
+      throw error;
     }
   };
 
@@ -540,5 +667,6 @@ export const usePosts = () => {
     getRequestCount,
     getReceivedRequests,
     getAcceptedRequests,
+    createPaymentOrder,
   };
 };

@@ -56,6 +56,7 @@ export default function Notifications() {
       );
 
       await getRequestCount();
+      router.replace("/(tabs)/chat");
     }
   };
   return (

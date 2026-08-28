@@ -97,6 +97,20 @@ const fetchUserProfile = async (
       };
     }
 
+    if (!data.profile_image_url && googlePicture) {
+      const { error: profileImageError } = await supabase
+        .from("profiles")
+        .update({ profile_image_url: googlePicture })
+        .eq("id", userId);
+
+      if (profileImageError) {
+        console.error(
+          "Error syncing Google profile image:",
+          profileImageError
+        );
+      }
+    }
+
     return {
       id: data.id,
       name: data.name ?? googleName,
