@@ -20,6 +20,18 @@ interface CreatePostData {
   requirements?: string;
   location?: string;
 }
+
+interface UpdatePostData {
+  postId: string;
+  imageUri?: string;
+  title: string;
+  description: string;
+  taskType: "single" | "multiple";
+  isNegotiable: boolean;
+  durationHours?: number;
+  requirements?: string;
+  location?: string;
+}
 export interface Post {
   id: string;
   user_id: string;
@@ -237,6 +249,125 @@ export const usePosts = () => {
     await getRequestCount();
   };
 
+  const updatePost = async ({
+    postId,
+    imageUri,
+    title,
+    description,
+    taskType,
+    isNegotiable,
+    durationHours,
+    requirements,
+    location,
+  }: UpdatePostData) => {
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    let imageUrl: string | undefined;
+
+    if (imageUri && !imageUri.startsWith("http")) {
+      imageUrl = await uploadPostImage(user.id, imageUri);
+    }
+
+    const { data: previousPost, error: previousPostError } = await supabase
+      .from("posts")
+      .select("title, description, task_type, is_negotiable, duration_hours, requirements, location, image_url")
+      .eq("id", postId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (previousPostError) {
+      throw previousPostError;
+    }
+
+    const updatedFields = {
+      title: title.trim(),
+      description: description.trim(),
+      task_type: taskType,
+      is_negotiable: isNegotiable,
+      duration_hours: durationHours ?? null,
+      requirements: requirements?.trim() || null,
+      location: location?.trim() || null,
+      ...(imageUrl ? { image_url: imageUrl } : {}),
+    };
+
+    const { data: updatedPost, error: updateError } = await supabase
+      .from("posts")
+      .update(updatedFields)
+      .eq("id", postId)
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    const changes: string[] = [];
+    const changed = (label: string, oldValue: unknown, newValue: unknown) => {
+      if (String(oldValue ?? "") !== String(newValue ?? "")) {
+        changes.push(label);
+      }
+    };
+
+    changed("Title", previousPost.title, updatedFields.title);
+    changed("Description", previousPost.description, updatedFields.description);
+    changed("Task type", previousPost.task_type, updatedFields.task_type);
+    changed("Negotiable setting", previousPost.is_negotiable, updatedFields.is_negotiable);
+    changed("Duration", previousPost.duration_hours, updatedFields.duration_hours);
+    changed("Requirements", previousPost.requirements, updatedFields.requirements);
+    changed("Location", previousPost.location, updatedFields.location);
+    if (imageUrl && imageUrl !== previousPost.image_url) {
+      changes.push("Photo");
+    }
+
+    if (changes.length > 0) {
+      const { data: acceptedRequests, error: requestsError } = await supabase
+        .from("requests")
+        .select("sender_id, receiver_id")
+        .eq("post_id", postId)
+        .eq("status", "accepted");
+
+      if (requestsError) {
+        throw requestsError;
+      }
+
+      const recipientIds = [
+        ...new Set(
+          (acceptedRequests ?? []).flatMap((request) => [
+            request.sender_id,
+            request.receiver_id,
+          ]).filter((id) => id !== user.id)
+        ),
+      ];
+
+      if (recipientIds.length > 0) {
+        const { error: notificationError } = await supabase
+          .from("notifications")
+          .insert(
+            recipientIds.map((recipientId) => ({
+              recipient_id: recipientId,
+              sender_id: user.id,
+              post_id: postId,
+              type: "post_updated",
+              title: "Post updated",
+              message: `${title.trim()} changed: ${changes.join(", ")}`,
+              is_read: false,
+            }))
+          );
+
+        if (notificationError) {
+          throw notificationError;
+        }
+      }
+    }
+
+    await loadPosts();
+    return updatedPost;
+  };
+
 
   // SEND REQUEST
   const sendRequest = async (
@@ -435,14 +566,14 @@ const getReceivedRequests = async (): Promise<ReceivedRequest[]> => {
       (request) => request.post_id
     );
 
-    // Get sender profiles using profiles.user_id
+    // Get sender profiles using the auth UUID stored in profiles.id
     const { data: profilesData, error: profilesError } =
       await supabase
         .from("profiles")
         .select(
-          "user_id, name, username, profile_image_url"
+          "id, name, username, profile_image_url"
         )
-        .in("user_id", senderIds);
+        .in("id", senderIds);
 
     if (profilesError) {
       console.error(
@@ -472,7 +603,7 @@ const requestsWithProfiles: ReceivedRequest[] =
   requestsData.map((request) => {
     const profile = profilesData?.find(
       (profile) =>
-        profile.user_id === request.sender_id
+        profile.id === request.sender_id
     );
 
     const post = postsData?.find(
@@ -490,7 +621,7 @@ const requestsWithProfiles: ReceivedRequest[] =
 
       sender: profile
         ? {
-            id: profile.user_id,
+            id: profile.id,
             name: profile.name,
             username: profile.username,
             profile_image_url:
@@ -658,6 +789,7 @@ const getAcceptedRequests = async (): Promise<AcceptedRequest[]> => {
 
   return {
     createPost,
+    updatePost,
     posts,
     refreshPosts,
     sendRequest,

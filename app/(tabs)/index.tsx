@@ -305,6 +305,7 @@ export default function Index() {
   // const { createPost, posts, refreshPosts } = usePosts();
   const {
     createPost,
+    updatePost,
     posts,
     refreshPosts,
     sendRequest,
@@ -462,6 +463,24 @@ export default function Index() {
     setIsUploading(true);
 
     try {
+      if (hasActivePost && userActivePost) {
+        await updatePost({
+          postId: userActivePost.id,
+          imageUri: previewImage ?? undefined,
+          title: title.trim(),
+          description: description.trim(),
+          taskType,
+          isNegotiable,
+          durationHours: durationNumber,
+          requirements: requirements.trim() || undefined,
+          location: location.trim() || undefined,
+        });
+
+        await refreshPosts();
+        setShowPreview(false);
+        return;
+      }
+
       // ------------------------------------------
       // 1. CREATE RAZORPAY ORDER
       // ------------------------------------------
@@ -587,8 +606,28 @@ export default function Index() {
         }
       />
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowPreview(true)}>
-        <Text style={styles.fabText}>{hasActivePost ? "♻" : "+"}</Text>
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => {
+          if (hasActivePost && userActivePost) {
+            setTitle(userActivePost.title);
+            setDescription(userActivePost.description ?? "");
+            setTaskType(userActivePost.task_type);
+            setBudget(String(userActivePost.budget ?? ""));
+            setIsNegotiable(userActivePost.is_negotiable);
+            setDurationHours(String(userActivePost.duration_hours ?? ""));
+            setRequirements(userActivePost.requirements ?? "");
+            setLocation(userActivePost.location ?? "");
+            setPreviewImage(userActivePost.image_url ?? null);
+          }
+          setShowPreview(true);
+        }}
+      >
+        <Ionicons
+          name={hasActivePost ? "pencil" : "add"}
+          size={26}
+          color="#fff"
+        />
       </TouchableOpacity>
 
       <Modal
@@ -604,7 +643,7 @@ export default function Index() {
           >
 
             <Text style={styles.modalTitle}>
-              {hasActivePost ? "Replace Your Job" : "Post a Job"}
+              {hasActivePost ? "Edit Your Job" : "Post a Job"}
             </Text>
 
             {/* JOB TITLE */}
@@ -687,6 +726,7 @@ export default function Index() {
               value={budget}
               onChangeText={setBudget}
               keyboardType="numeric"
+              editable={!hasActivePost}
             />
 
             {/* NEGOTIABLE */}
@@ -825,9 +865,7 @@ export default function Index() {
                   />
                 ) : (
                   <Text style={styles.postButtonText}>
-                    {hasActivePost
-                      ? "Replace"
-                      : "Post Job"}
+                    {hasActivePost ? "Save Changes" : "Post Job"}
                   </Text>
                 )}
               </TouchableOpacity>

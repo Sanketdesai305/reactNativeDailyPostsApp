@@ -3,11 +3,11 @@
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase/client";
 import {
-    createContext,
-    ReactNode,
-    useContext,
-    useEffect,
-    useState,
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
 } from "react";
 
 interface RequestContextType {
@@ -34,7 +34,7 @@ export const RequestProvider = ({
       return;
     }
 
-    const { count, error } = await supabase
+    const { count: requestCount, error: requestError } = await supabase
       .from("requests")
       .select("*", {
         count: "exact",
@@ -43,15 +43,26 @@ export const RequestProvider = ({
       .eq("receiver_id", user.id)
       .eq("status", "pending");
 
-    if (error) {
+    if (requestError) {
       console.error(
         "Error getting request count:",
-        error
+        requestError
       );
       return;
     }
 
-    setRequestCount(count ?? 0);
+    const { count: notificationCount, error: notificationError } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("recipient_id", user.id)
+      .eq("is_read", false);
+
+    if (notificationError) {
+      console.error("Error getting notification count:", notificationError);
+      return;
+    }
+
+    setRequestCount((requestCount ?? 0) + (notificationCount ?? 0));
   };
 
   useEffect(() => {

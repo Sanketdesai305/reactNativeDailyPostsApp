@@ -1,9 +1,12 @@
+import { useAuth } from "@/context/AuthContext";
 import { useRequests } from "@/context/RequestContext";
+import { supabase } from "@/lib/supabase/client";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,20 +19,66 @@ import {
   usePosts,
 } from "./hooks/usePosts";
 
+interface PostUpdateNotification {
+  id: string;
+  title: string;
+  message: string;
+  post_id: string;
+  is_read: boolean;
+  created_at: string;
+}
+
 export default function Notifications() {
   const router = useRouter();
+  const { user } = useAuth();
   const { getReceivedRequests, rejectRequest, acceptRequest } = usePosts();
   const { getRequestCount } = useRequests();
   const [requests, setRequests] = useState<ReceivedRequest[]>([]);
+  const [postNotifications, setPostNotifications] = useState<PostUpdateNotification[]>([]);
+  const [selectedNotification, setSelectedNotification] = useState<PostUpdateNotification | null>(null);
 
   useEffect(() => {
     const loadRequests = async () => {
       const data = await getReceivedRequests();
       setRequests(data);
+
+      const { data: notificationData, error } = await supabase
+        .from("notifications")
+        .select("id, title, message, post_id, is_read, created_at")
+        .eq("recipient_id", user?.id)
+        .eq("type", "post_updated")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error loading post notifications:", error);
+      } else {
+        setPostNotifications(notificationData ?? []);
+      }
     };
 
     loadRequests();
-  }, []);
+  }, [user?.id]);
+
+  const handleNotificationPress = async (notification: PostUpdateNotification) => {
+    setSelectedNotification(notification);
+
+    if (!notification.is_read) {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", notification.id)
+        .eq("recipient_id", user?.id);
+
+      if (!error) {
+        setPostNotifications((current) =>
+          current.map((item) =>
+            item.id === notification.id ? { ...item, is_read: true } : item
+          )
+        );
+        await getRequestCount();
+      }
+    }
+  };
 
   const handleReject = async (requestId: string) => {
     const success = await rejectRequest(requestId);
@@ -77,6 +126,22 @@ export default function Notifications() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {postNotifications.map((notification) => (
+          <TouchableOpacity
+            key={notification.id}
+            style={[styles.notificationCard, !notification.is_read && styles.unreadCard]}
+            onPress={() => handleNotificationPress(notification)}
+          >
+            <Ionicons name="create-outline" size={24} color="#6C63FF" />
+            <View style={styles.notificationContent}>
+              <Text style={styles.notificationTitle}>{notification.title}</Text>
+              <Text style={styles.notificationPreview} numberOfLines={2}>
+                {notification.message}
+              </Text>
+            </View>
+            {!notification.is_read && <View style={styles.unreadDot} />}
+          </TouchableOpacity>
+        ))}
         {requests.map((request) => (
           <View key={request.id} style={styles.requestCard}>
 
@@ -149,6 +214,30 @@ export default function Notifications() {
           </View>
         ))}
       </ScrollView>
+
+      <Modal
+        visible={!!selectedNotification}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedNotification(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.notificationModal}>
+            <Text style={styles.modalTitle}>
+              {selectedNotification?.title}
+            </Text>
+            <Text style={styles.modalMessage}>
+              {selectedNotification?.message}
+            </Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setSelectedNotification(null)}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -190,6 +279,80 @@ const styles = StyleSheet.create({
 
     // optional shadow
     elevation: 2,
+  },
+
+  notificationCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 15,
+    marginTop: 10,
+    padding: 16,
+    backgroundColor: "#f7f6ff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e2ff",
+  },
+  unreadCard: {
+    borderColor: "#6C63FF",
+  },
+  notificationContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  notificationTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#222",
+    marginBottom: 4,
+  },
+  notificationPreview: {
+    fontSize: 13,
+    color: "#555",
+    lineHeight: 18,
+  },
+  unreadDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#6C63FF",
+    marginLeft: 8,
+  },
+  modalBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+  },
+  notificationModal: {
+    width: "100%",
+    maxWidth: 380,
+    padding: 22,
+    borderRadius: 14,
+    backgroundColor: "#fff",
+  },
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: "700",
+    marginBottom: 12,
+    color: "#222",
+  },
+  modalMessage: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#444",
+  },
+  closeButton: {
+    alignSelf: "flex-end",
+    marginTop: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#6C63FF",
+  },
+  closeButtonText: {
+    color: "#fff",
+    fontWeight: "700",
   },
 
   profileImage: {
