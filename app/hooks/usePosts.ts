@@ -459,7 +459,7 @@ export const usePosts = () => {
       // 1. Get the request so we know which post it belongs to
       const { data: request, error: requestError } = await supabase
         .from("requests")
-        .select("post_id")
+        .select("post_id, sender_id")
         .eq("id", requestId)
         .eq("receiver_id", user.id)
         .eq("status", "pending")
@@ -486,6 +486,25 @@ export const usePosts = () => {
         return false;
       }
 
+      // 3. Attach worker to held payment
+      const { data: payment, error: paymentError } = await supabase
+        .from("payments")
+        .update({
+          request_id: requestId,
+          worker_id: request.sender_id,
+        })
+        .eq("post_id", request.post_id)
+        .eq("payer_id", user.id)
+        .eq("status", "held")
+        .select()
+        .single();
+
+      if (paymentError) {
+        console.error("Error assigning worker to payment:", paymentError);
+        return false;
+      }
+      console.log("PAYMENT UPDATED:", payment);
+      console.log("PAYMENT UPDATE ERROR:", paymentError);   
       // 3. Mark the accepted request as ready for chat
       const { error: postError } = await supabase
         .from("posts")

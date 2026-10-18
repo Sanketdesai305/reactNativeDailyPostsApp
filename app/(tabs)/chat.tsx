@@ -35,8 +35,6 @@ export default function Chat() {
   useEffect(() => {
     if (!user) return;
 
-    loadAcceptedRequests();
-
     let isActive = true;
     let requestChannel: ReturnType<typeof supabase.channel> | null = null;
     const channelName = `chat-requests-${user.id}`;
@@ -47,25 +45,30 @@ export default function Chat() {
         .find((channel) => channel.topic === `realtime:${channelName}`);
 
       if (existingChannel) {
-        await supabase.removeChannel(existingChannel);
+        supabase.removeChannel(existingChannel);
       }
 
       if (!isActive) return;
 
-      requestChannel = supabase
-        .channel(channelName)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "requests",
-          },
-          loadAcceptedRequests
-        )
-        .subscribe();
+      requestChannel = supabase.channel(channelName);
+      requestChannel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "requests",
+        },
+        () => {
+          if (isActive) {
+            loadAcceptedRequests();
+          }
+        }
+      );
+
+      await requestChannel.subscribe();
     };
 
+    loadAcceptedRequests();
     subscribeToRequests();
 
     return () => {

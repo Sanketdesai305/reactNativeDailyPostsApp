@@ -26,9 +26,10 @@ interface PostCardProps {
   post: Post;
   currentUserId?: string;
   sendRequest: (receiverId: string, postId: string) => Promise<boolean>;
+  onPress?: () => void;
 }
 
-const PostCard = ({ post, currentUserId, sendRequest }: PostCardProps) => {
+const PostCard = ({ post, currentUserId, sendRequest, onPress }: PostCardProps) => {
   const [requestStatus, setRequestStatus] = useState<
     "none" | "pending" | "accepted" | "rejected"
   >("none");
@@ -80,18 +81,23 @@ const PostCard = ({ post, currentUserId, sendRequest }: PostCardProps) => {
     }
   };
   return (
-    <View style={styles.postContainer}>
+    <TouchableOpacity
+      activeOpacity={0.96}
+      onPress={onPress}
+      style={styles.postContainer}
+    >
       <View style={styles.postHeader}>
 
         <TouchableOpacity
-          onPress={() =>
+          onPress={(event) => {
+            event.stopPropagation();
             router.push({
               pathname: "/details",
               params: {
                 userId: post.user_id,
               },
-            })
-          }
+            });
+          }}
         >
           <View style={styles.userInfo}>
             {postUser?.profile_image_url ? (
@@ -149,7 +155,12 @@ const PostCard = ({ post, currentUserId, sendRequest }: PostCardProps) => {
             {post.title}
           </Text>
 
-          <TouchableOpacity onPress={() => handleShareJob(post)}>
+          <TouchableOpacity
+            onPress={(event) => {
+              event.stopPropagation();
+              handleShareJob(post);
+            }}
+          >
             <Ionicons name="share-social-outline" size={24} color="#333" />
           </TouchableOpacity>
         </View>
@@ -267,7 +278,10 @@ const PostCard = ({ post, currentUserId, sendRequest }: PostCardProps) => {
         {/* SEND REQUEST */}
         {!isOwnPost && (
           <TouchableOpacity
-            onPress={sendRequestFunc}
+            onPress={(event) => {
+              event.stopPropagation();
+              sendRequestFunc();
+            }}
             disabled={
               requestStatus === "pending" ||
               requestStatus === "accepted"
@@ -284,7 +298,7 @@ const PostCard = ({ post, currentUserId, sendRequest }: PostCardProps) => {
 
       </View>
 
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -587,6 +601,14 @@ export default function Index() {
       post={item}
       currentUserId={user?.id}
       sendRequest={sendRequest}
+      onPress={() =>
+        router.push({
+          pathname: "/jobDetails",
+          params: {
+            postId: item.id,
+          },
+        })
+      }
     />
   );
 

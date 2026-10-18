@@ -139,8 +139,8 @@ export default function Profile() {
             <Text style={styles.settingValue}>→</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
-            <Text style={styles.settingLabel}>Privacy</Text>
+          <TouchableOpacity style={styles.settingItem} onPress={() => router.push("../paymentSetup")}>
+            <Text style={styles.settingLabel}>Payment Setup</Text>
             <Text style={styles.settingValue}>→</Text>
           </TouchableOpacity>
         </View>
