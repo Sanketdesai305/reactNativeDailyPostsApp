@@ -390,7 +390,6 @@ export default function Index() {
     if (!result.canceled && result.assets[0]) {
       setPreviewImage(result.assets[0].uri);
       setShowPreview(true);
-      setDescription("");
     }
   };
 
@@ -412,7 +411,6 @@ export default function Index() {
     if (!result.canceled && result.assets[0]) {
       setPreviewImage(result.assets[0].uri);
       setShowPreview(true);
-      setDescription("");
     }
   };
 
