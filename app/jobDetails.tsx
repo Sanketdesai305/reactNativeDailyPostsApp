@@ -59,6 +59,11 @@ type Payment = {
   worker_id: string | null;
 };
 
+type AcceptedWorker = {
+  request: Request;
+  profile: Profile | null;
+};
+
 export default function JobDetails() {
   const router = useRouter();
   const { user } = useAuth();
@@ -70,6 +75,7 @@ export default function JobDetails() {
   const [request, setRequest] = useState<Request | null>(null);
   const [poster, setPoster] = useState<Profile | null>(null);
   const [worker, setWorker] = useState<Profile | null>(null);
+  const [acceptedWorkers, setAcceptedWorkers] = useState<AcceptedWorker[]>([]);
   const [payment, setPayment] = useState<Payment | null>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
@@ -139,45 +145,6 @@ export default function JobDetails() {
       }
 
       // ------------------------------------------
-      // ACCEPTED REQUEST
-      // ------------------------------------------
-
-      const {
-        data: requestData,
-        error: requestError,
-      } = await supabase
-        .from("requests")
-        .select(
-          "id, sender_id, receiver_id, status, accepted_at"
-        )
-        .eq("post_id", postId)
-        .eq("status", "accepted")
-        .maybeSingle();
-
-      if (!requestError && requestData) {
-        setRequest(requestData);
-
-        // --------------------------------------
-        // WORKER PROFILE
-        // --------------------------------------
-
-        const {
-          data: workerData,
-          error: workerError,
-        } = await supabase
-          .from("profiles")
-          .select(
-            "id, name, username, profile_image_url"
-          )
-          .eq("id", requestData.sender_id)
-          .single();
-
-        if (!workerError) {
-          setWorker(workerData);
-        }
-      }
-
-      // ------------------------------------------
       // PAYMENT
       // ------------------------------------------
 
@@ -194,6 +161,78 @@ export default function JobDetails() {
 
       if (!paymentError && paymentData) {
         setPayment(paymentData);
+      } else if (paymentError) {
+        console.error("Error loading job payment:", paymentError);
+      }
+
+      // ------------------------------------------
+      // ACCEPTED WORKERS
+      // ------------------------------------------
+
+      const {
+        data: acceptedRequestData,
+        error: acceptedRequestError,
+      } = await supabase
+        .from("requests")
+        .select("id, sender_id, receiver_id, status, accepted_at")
+        .eq("post_id", postId)
+        .eq("status", "accepted")
+        .order("accepted_at", { ascending: false });
+
+      if (acceptedRequestError) {
+        throw acceptedRequestError;
+      }
+
+      const acceptedRequests: Request[] = acceptedRequestData ?? [];
+      const acceptedWorkerIds = [
+        ...new Set(acceptedRequests.map((item) => item.sender_id)),
+      ];
+
+      const { data: acceptedWorkerProfiles, error: workerProfilesError } =
+        acceptedWorkerIds.length > 0
+          ? await supabase
+              .from("profiles")
+              .select("id, name, username, profile_image_url")
+              .in("id", acceptedWorkerIds)
+          : { data: [], error: null };
+
+      if (workerProfilesError) {
+        throw workerProfilesError;
+      }
+
+      setAcceptedWorkers(
+        acceptedRequests.map((acceptedRequest) => ({
+          request: acceptedRequest,
+          profile:
+            acceptedWorkerProfiles?.find(
+              (profile) => profile.id === acceptedRequest.sender_id
+            ) ?? null,
+        }))
+      );
+
+      const assignedRequest =
+        acceptedRequests.find(
+          (acceptedRequest) =>
+            acceptedRequest.id === paymentData?.request_id
+        ) ??
+        acceptedRequests.find(
+          (acceptedRequest) =>
+            acceptedRequest.sender_id === paymentData?.worker_id
+        ) ??
+        null;
+
+      setRequest(assignedRequest);
+      const assignedWorkerId =
+        paymentData?.worker_id ?? assignedRequest?.sender_id;
+
+      if (assignedWorkerId) {
+        const assignedProfile =
+          acceptedWorkerProfiles?.find(
+            (profile) => profile.id === assignedWorkerId
+          );
+        setWorker(assignedProfile ?? null);
+      } else {
+        setWorker(null);
       }
     } catch (error) {
       console.error(
@@ -241,6 +280,35 @@ export default function JobDetails() {
     : isWorker
       ? job?.poster_completion_status
       : null;
+
+  const assignAcceptedWorker = async (requestId: string) => {
+    if (!isPoster || payment?.status !== "held") {
+      Alert.alert(
+        "Reassignment unavailable",
+        "A worker can only be assigned while the job payment is on hold."
+      );
+      return;
+    }
+
+    setIsUpdating(true);
+
+    try {
+      const { error } = await supabase.rpc("assign_accepted_worker", {
+        p_request_id: requestId,
+      });
+
+      if (error) {
+        console.error("Error assigning accepted worker:", error);
+        Alert.alert("Unable to assign worker", error.message);
+        return;
+      }
+
+      await loadJobDetails();
+      Alert.alert("Worker assigned", "The job payment is assigned to this worker.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   // --------------------------------------------------
   // MARK COMPLETED
@@ -549,10 +617,69 @@ const markDispute = async () => {
         {worker && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>
-              Worker
+              Assigned worker
             </Text>
 
             <ProfileRow profile={worker} />
+          </View>
+        )}
+
+        {isPoster && acceptedWorkers.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>
+              Accepted workers
+            </Text>
+
+            {acceptedWorkers.map(({ request: acceptedRequest, profile }) => {
+              const isAssigned =
+                payment?.request_id === acceptedRequest.id ||
+                (!payment?.request_id &&
+                  payment?.worker_id === acceptedRequest.sender_id);
+
+              return (
+                <View key={acceptedRequest.id} style={styles.acceptedWorkerRow}>
+                  <View style={styles.acceptedWorkerProfile}>
+                    {profile ? (
+                      <ProfileRow profile={profile} />
+                    ) : (
+                      <Text style={styles.profileName}>Worker</Text>
+                    )}
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.assignButton,
+                      (isAssigned ||
+                        isUpdating ||
+                        payment?.status !== "held") &&
+                        styles.assignButtonDisabled,
+                    ]}
+                    disabled={
+                      isAssigned ||
+                      isUpdating ||
+                      payment?.status !== "held"
+                    }
+                    onPress={() =>
+                      void assignAcceptedWorker(acceptedRequest.id)
+                    }
+                  >
+                    <Text style={styles.assignButtonText}>
+                      {isAssigned
+                        ? "Assigned"
+                        : payment?.worker_id
+                          ? "Reassign"
+                          : "Assign"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+
+            {payment?.status !== "held" && (
+              <Text style={styles.reassignmentNote}>
+                Reassignment is unavailable because the payment is no longer on hold.
+              </Text>
+            )}
           </View>
         )}
 
@@ -592,16 +719,15 @@ const markDispute = async () => {
 
         {/* CHAT */}
 
-        {request && (
+        {poster && userId !== poster.id && (
           <TouchableOpacity
             style={styles.chatButton}
             onPress={() => {
-              // Replace with your existing chat route.
               router.push({
-                pathname: "/chat",
+                pathname: "/chat/[userId]",
                 params: {
+                  userId: poster.id,
                   postId: job.id,
-                  requestId: request.id,
                 },
               });
             }}
@@ -1041,6 +1167,44 @@ const styles = StyleSheet.create({
 
   username: {
     marginTop: 3,
+    fontSize: 13,
+    color: "#777",
+  },
+
+  acceptedWorkerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+
+  acceptedWorkerProfile: {
+    flex: 1,
+  },
+
+  assignButton: {
+    minWidth: 88,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: "#6C63FF",
+    alignItems: "center",
+  },
+
+  assignButtonDisabled: {
+    backgroundColor: "#aaa",
+  },
+
+  assignButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  reassignmentNote: {
+    marginTop: 10,
     fontSize: 13,
     color: "#777",
   },

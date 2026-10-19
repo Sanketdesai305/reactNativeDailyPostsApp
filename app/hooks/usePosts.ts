@@ -456,71 +456,16 @@ export const usePosts = () => {
     }
 
     try {
-      // 1. Get the request so we know which post it belongs to
-      const { data: request, error: requestError } = await supabase
-        .from("requests")
-        .select("post_id, sender_id")
-        .eq("id", requestId)
-        .eq("receiver_id", user.id)
-        .eq("status", "pending")
-        .single();
+      const { error } = await supabase.rpc("assign_accepted_worker", {
+        p_request_id: requestId,
+      });
 
-      if (requestError || !request) {
-        console.error("Error getting request:", requestError);
+      if (error) {
+        console.error("Error accepting and assigning request:", error);
         return false;
       }
 
-      // 2. Accept the request
-      const { error: acceptError } = await supabase
-        .from("requests")
-        .update({
-          status: "accepted",
-          accepted_at: new Date().toISOString(),
-        })
-        .eq("id", requestId)
-        .eq("receiver_id", user.id)
-        .eq("status", "pending");
-
-      if (acceptError) {
-        console.error("Error accepting request:", acceptError);
-        return false;
-      }
-
-      // 3. Attach worker to held payment
-      const { data: payment, error: paymentError } = await supabase
-        .from("payments")
-        .update({
-          request_id: requestId,
-          worker_id: request.sender_id,
-        })
-        .eq("post_id", request.post_id)
-        .eq("payer_id", user.id)
-        .eq("status", "held")
-        .select()
-        .single();
-
-      if (paymentError) {
-        console.error("Error assigning worker to payment:", paymentError);
-        return false;
-      }
-      console.log("PAYMENT UPDATED:", payment);
-      console.log("PAYMENT UPDATE ERROR:", paymentError);   
-      // 3. Mark the accepted request as ready for chat
-      const { error: postError } = await supabase
-        .from("posts")
-        .update({
-          status: "in_progress",
-        })
-        .eq("id", request.post_id);
-
-      if (postError) {
-        console.error("Error updating post status:", postError);
-        return false;
-      }
-
-      // 4. Remove the request from notification count
       setRequestCount((count) => Math.max(0, count - 1));
-
       return true;
     } catch (error) {
       console.error("Error in acceptRequest:", error);
@@ -668,7 +613,6 @@ const getAcceptedRequests = async (): Promise<AcceptedRequest[]> => {
   if (!user) return [];
 
   try {
-    // 1. Get accepted requests involving the current user
     const { data: requestsData, error: requestsError } =
       await supabase
         .from("requests")
@@ -694,75 +638,113 @@ const getAcceptedRequests = async (): Promise<AcceptedRequest[]> => {
       return [];
     }
 
-    if (!requestsData || requestsData.length === 0) {
-      return [];
+    const { data: messagesData, error: messagesError } =
+      await supabase
+        .from("messages")
+        .select("sender_id, receiver_id, post_id, created_at")
+        .or(
+          `sender_id.eq.${user.id},receiver_id.eq.${user.id}`
+        )
+        .order("created_at", { ascending: false });
+
+    if (messagesError) {
+      console.error("Error getting chat conversations:", messagesError);
     }
 
-    // 2. Get the ID of the other user for each request
-    const otherUserIds = requestsData.map((request) =>
-      request.sender_id === user.id
-        ? request.receiver_id
-        : request.sender_id
+    const conversations = new Map<string, AcceptedRequest>();
+
+    for (const request of requestsData ?? []) {
+      const otherUserId =
+        request.sender_id === user.id
+          ? request.receiver_id
+          : request.sender_id;
+
+      if (!conversations.has(otherUserId)) {
+        conversations.set(otherUserId, {
+          ...request,
+          otherUser: null,
+        });
+      }
+    }
+
+    for (const message of messagesData ?? []) {
+      const otherUserId =
+        message.sender_id === user.id
+          ? message.receiver_id
+          : message.sender_id;
+      const existingConversation = conversations.get(otherUserId);
+
+      if (existingConversation) {
+        if (
+          new Date(message.created_at) >
+          new Date(existingConversation.created_at)
+        ) {
+          existingConversation.created_at = message.created_at;
+          existingConversation.post_id =
+            message.post_id ?? existingConversation.post_id;
+        }
+      } else {
+        conversations.set(otherUserId, {
+          id: `chat-${otherUserId}`,
+          sender_id: message.sender_id,
+          receiver_id: message.receiver_id,
+          post_id: message.post_id ?? "",
+          status: "messaged",
+          created_at: message.created_at,
+          otherUser: null,
+        });
+      }
+    }
+
+    const conversationList = Array.from(conversations.values());
+    const otherUserIds = conversationList.map((conversation) =>
+      conversation.sender_id === user.id
+        ? conversation.receiver_id
+        : conversation.sender_id
     );
 
-    // Remove duplicates
-    const uniqueUserIds = [
-      ...new Set(otherUserIds),
-    ];
-
-    // 3. Get profiles using the auth UUID stored in profiles.id
-    const {
-      data: profilesData,
-      error: profilesError,
-    } = await supabase
-      .from("profiles")
-      .select(
-        "id, name, username, profile_image_url"
-      )
-      .in("id", uniqueUserIds);
-
-    if (profilesError) {
-      console.error(
-        "Error getting accepted request profiles:",
-        profilesError
-      );
+    if (otherUserIds.length === 0) {
       return [];
     }
 
-    // 4. Attach the OTHER user's profile
-    const requestsWithProfiles: AcceptedRequest[] =
-      requestsData.map((request) => {
-        const otherUserId =
-          request.sender_id === user.id
-            ? request.receiver_id
-            : request.sender_id;
+    const { data: profilesData, error: profilesError } =
+      await supabase
+        .from("profiles")
+        .select("id, name, username, profile_image_url")
+        .in("id", otherUserIds);
 
+    if (profilesError) {
+      console.error("Error getting chat profiles:", profilesError);
+      return conversationList;
+    }
+
+    return conversationList
+      .map((conversation) => {
+        const otherUserId =
+          conversation.sender_id === user.id
+            ? conversation.receiver_id
+            : conversation.sender_id;
         const profile = profilesData?.find(
-          (profile) =>
-            profile.id === otherUserId
+          (item) => item.id === otherUserId
         );
 
         return {
-          id: request.id,
-          sender_id: request.sender_id,
-          receiver_id: request.receiver_id,
-          post_id: request.post_id,
-          status: request.status,
-          created_at: request.created_at,
-
+          ...conversation,
           otherUser: profile
             ? {
                 id: profile.id,
                 name: profile.name,
                 username: profile.username,
-                profile_image_url:
-                  profile.profile_image_url,
+                profile_image_url: profile.profile_image_url,
               }
             : null,
         };
-      });
-
-    return requestsWithProfiles;
+      })
+      .sort(
+        (first, second) =>
+          new Date(second.created_at).getTime() -
+          new Date(first.created_at).getTime()
+      );
   } catch (error) {
     console.error(
       "Error in getAcceptedRequests:",

@@ -6,6 +6,7 @@ import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -106,6 +107,11 @@ export default function Notifications() {
 
       await getRequestCount();
       router.replace("/(tabs)/chat");
+    } else {
+      Alert.alert(
+        "Unable to assign worker",
+        "The request could not be accepted. Make sure the job payment is on hold, then try again."
+      );
     }
   };
   return (

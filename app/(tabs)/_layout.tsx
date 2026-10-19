@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { Link, useRouter } from "expo-router";
 import {
+  Badge,
   Icon,
   Label,
   NativeTabs,
@@ -53,7 +54,7 @@ export default function TabsLayout() {
   };
 
   const { user, isLoading, signOut } = useAuth();
-  const { requestCount } = useRequests();
+  const { requestCount, unreadMessageCount } = useRequests();
   const router = useRouter();
 
   useEffect(() => {
@@ -290,6 +291,8 @@ export default function TabsLayout() {
         <View style={styles.tabsContainer}>
           <NativeTabs
             backgroundColor="rgba(255, 255, 255, 0.1)"
+            badgeBackgroundColor="#FF3B30"
+            badgeTextColor="#fff"
             iconColor={{
               default: "#8E8E93",
               selected: "#6C63FF",
@@ -331,6 +334,13 @@ export default function TabsLayout() {
                   />
                 }
               />
+              {unreadMessageCount > 0 && (
+                <Badge>
+                  {unreadMessageCount > 99
+                    ? "99+"
+                    : String(unreadMessageCount)}
+                </Badge>
+              )}
               <Label>Chat</Label>
             </NativeTabs.Trigger>
 

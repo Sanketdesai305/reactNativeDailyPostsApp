@@ -1,9 +1,10 @@
 import { useAuth } from "@/context/AuthContext";
+import { useRequests } from "@/context/RequestContext";
 import { supabase } from "@/lib/supabase/client";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -23,6 +24,7 @@ interface Message {
   post_id: string | null;
   content: string;
   created_at: string;
+  is_read: boolean;
 }
 interface ChatUser {
   id: string;
@@ -34,6 +36,7 @@ interface ChatUser {
 export default function ChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { markMessagesRead } = useRequests();
 
   const { userId, postId } = useLocalSearchParams<{
     userId: string;
@@ -79,7 +82,7 @@ export default function ChatScreen() {
   // LOAD EXISTING MESSAGES
   // --------------------------------------------------
 
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async () => {
     if (!user?.id || !userId) return;
 
     const { data, error } = await supabase
@@ -90,7 +93,8 @@ export default function ChatScreen() {
         receiver_id,
         post_id,
         content,
-        created_at
+        created_at,
+        is_read
       `)
       .or(
         `and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`
@@ -105,7 +109,8 @@ export default function ChatScreen() {
     }
 
     setMessages(data ?? []);
-  };
+    await markMessagesRead(userId);
+  }, [user?.id, userId, markMessagesRead]);
 
   // --------------------------------------------------
   // INITIAL LOAD + REALTIME
@@ -139,6 +144,10 @@ export default function ChatScreen() {
             return;
           }
 
+          if (newMessage.sender_id === userId) {
+            void markMessagesRead(userId);
+          }
+
           setMessages((currentMessages) => {
             // Prevent duplicates
             if (
@@ -158,7 +167,7 @@ export default function ChatScreen() {
     return () => {
       supabase.removeChannel(messageChannel);
     };
-  }, [user?.id, userId]);
+  }, [user?.id, userId, loadMessages, markMessagesRead]);
 
   // --------------------------------------------------
   // SEND MESSAGE

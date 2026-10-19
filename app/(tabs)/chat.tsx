@@ -64,6 +64,28 @@ export default function Chat() {
           }
         }
       );
+      requestChannel.on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+        },
+        (payload) => {
+          const newMessage = payload.new as {
+            sender_id: string;
+            receiver_id: string;
+          };
+
+          if (
+            isActive &&
+            (newMessage.sender_id === user.id ||
+              newMessage.receiver_id === user.id)
+          ) {
+            loadAcceptedRequests();
+          }
+        }
+      );
 
       await requestChannel.subscribe();
     };
@@ -115,7 +137,9 @@ export default function Chat() {
                 pathname: "/chat/[userId]",
                 params: {
                   userId: request.otherUser.id,
-                  postId: request.post_id,
+                  ...(request.post_id
+                    ? { postId: request.post_id }
+                    : {}),
                 },
               });
             }}
